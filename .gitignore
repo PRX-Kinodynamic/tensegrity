@@ -1,0 +1,7 @@
+**data/
+.DS_Store
+**.DS_Store
+./CMakeLists.txt
+/CMakeLists.txt
+.vscode/
+*.bag
