@@ -1,7 +1,30 @@
 <library path="lib/libperception_nodelets">
-  <!-- <class name="estimation/aruco_cTw_nodelet_t" type="estimation::aruco_cTw_nodelet_t" base_class_type="nodelet::Nodelet">
+  <class name="perception/ColorFilter" 
+         type="perception::ColorFilter" 
+         base_class_type="nodelet::Nodelet">
     <description> 
-      Nodelet to get poses from opencvPNP
+      Color filter
     </description>
-  </class> -->
+  </class> 
+  <class name="perception/DilateImage" 
+         type="perception::DilateImage" 
+         base_class_type="nodelet::Nodelet">
+    <description> 
+      Dilate images
+    </description>
+  </class> 
+  <class name="perception/MaskImage" 
+         type="perception::MaskImage" 
+         base_class_type="nodelet::Nodelet">
+    <description> 
+      Apply mask to images
+    </description>
+  </class> 
+  <class name="perception/EndcapPosition" 
+         type="perception::EndcapPosition" 
+         base_class_type="nodelet::Nodelet">
+    <description> 
+      Get the world position of a circle in an image
+    </description>
+  </class> 
 </library>

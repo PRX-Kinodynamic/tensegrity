@@ -1,0 +1,55 @@
+<launch>
+    <arg name="red_config" default="$(find perception)/config/2025-01-23_16-38-18/red.yaml"/>
+    <arg name="blue_config" default="$(find perception)/config/2025-01-23_16-38-18/blue.yaml"/>
+    <arg name="green_config" default="$(find perception)/config/2025-01-23_16-38-18/green.yaml"/>
+
+    <group ns="viz">
+        <node pkg="nodelet" type="nodelet" name="poly_viz_nodelet" args="manager" output="screen">
+          <param name="num_worker_threads" value="4" />
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="poly_red" 
+            args="load estimation/PosesFromPoly poly_viz_nodelet" output="screen">
+            <param name="endcap_topic_name" value="/tensegrity/endcap/red/positions"/>
+            <param name="se3_topic_name" value="/tensegrity/bar/red/pose"/>
+            <rosparam command="load" file="$(arg red_config)" />
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="poly_blue" 
+            args="load estimation/PosesFromPoly poly_viz_nodelet" output="screen">
+            <param name="endcap_topic_name" value="/tensegrity/endcap/blue/positions"/>
+            <param name="se3_topic_name" value="/tensegrity/bar/blue/pose"/>
+            <rosparam command="load" file="$(arg blue_config)" />
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="poly_green" 
+            args="load estimation/PosesFromPoly poly_viz_nodelet" output="screen">
+            <param name="endcap_topic_name" value="/tensegrity/endcap/green/positions"/>
+            <param name="se3_topic_name" value="/tensegrity/bar/green/pose"/>
+            <rosparam command="load" file="$(arg green_config)" />
+        </node>
+        
+        <node pkg="nodelet" type="nodelet" name="poly_red_viz" 
+            args="load utils/PosesArrayViz poly_viz_nodelet" output="screen">
+            <param name="topic_name" value="/tensegrity/endcap/red/path"/>
+            <param name="line_width" value="0.02"/>
+            <param name="color" type="yaml" value="[0.9, 0.1, 0.1, 0.7]"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="poly_blue_viz" 
+            args="load utils/PosesArrayViz poly_viz_nodelet" output="screen">
+            <param name="topic_name" value="/tensegrity/endcap/blue/path"/>
+            <param name="line_width" value="0.02"/>
+            <param name="color" type="yaml" value="[0.1, 0.1, 0.9, 0.7]"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="poly_green_viz" 
+            args="load utils/PosesArrayViz poly_viz_nodelet" output="screen">
+            <param name="topic_name" value="/tensegrity/endcap/green/path"/>
+            <param name="line_width" value="0.02"/>
+            <param name="color" type="yaml" value="[0.1, 0.9, 0.1, 0.7]"/>
+        </node>
+ 
+    </group>
+
+</launch>

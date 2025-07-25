@@ -1,0 +1,25 @@
+<launch>
+    <!-- /Users/Gary/Downloads/2025-01-23_16-38-18/data/0567.json -->
+    <arg name="img_directory" default="$(env HOME)/Downloads/2025-01-23_16-38-18/"/>
+    <arg name="loop" default="false"/>
+    <!-- <arg name="img_directory" default="$(env HOME)/Downloads/test_encoder_imu_1/"/> -->
+    <arg name="frequency" default="15"/>
+
+     <node pkg="interface" type="images_to_topic.py" name="rgb_imgs"
+         output="screen" required="true">
+        <param name="dir" value="$(arg img_directory)/color" />
+        <param name="topic_name" value="/images/rgb" />
+        <param name="format" value="color" />
+        <param name="frequency" value="$(arg frequency)" />
+        <param name="loop" value="$(arg loop)" />
+    </node>
+    <node pkg="interface" type="images_to_topic.py" name="depth_imgs" output="screen">
+        <param name="dir" value="$(arg img_directory)/depth" />
+        <param name="topic_name" value="/images/depth" />
+        <param name="format" value="gray" />
+        <param name="frequency" value="$(arg frequency)" />
+        <param name="loop" value="$(arg loop)" />
+    </node>
+
+
+</launch>

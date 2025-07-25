@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.5)
-project(utils)
+project(tensegrity_utils)
 set(CMAKE_CXX_STANDARD 17)
 
 # find_package(OpenCV REQUIRED )
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
-  interface
+  # interface
   # ml4kp_bridge
   roscpp
   std_msgs
@@ -53,7 +53,7 @@ generate_messages(
 # )
 
 catkin_package(
-#  INCLUDE_DIRS include
+ INCLUDE_DIRS include
 #  LIBRARIES mujoco
  CATKIN_DEPENDS roscpp std_msgs message_runtime
 #  DEPENDS system_lib
@@ -93,7 +93,6 @@ foreach(f ${EXECUTABLE_FILES})
   add_dependencies(${fname}
                    ${${PROJECT_NAME}_EXPORTED_TARGETS} 
                    ${catkin_EXPORTED_TARGETS}
-                   ${PROJECT_NAME}_gencfg
                    )
   ## Specify libraries to link a library or executable target against
   target_link_libraries(${fname}

@@ -2,18 +2,21 @@ cmake_minimum_required(VERSION 3.5)
 project(perception)
 set(CMAKE_CXX_STANDARD 17)
 
-# find_package(OpenCV REQUIRED )
+find_package(OpenCV REQUIRED )
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
-  # ml4kp_bridge
+  tensegrity_utils
   roscpp
   std_msgs
   roslib
   nodelet
   tf
   tf_conversions
-  # dynamic_reconfigure
+  # Tensegrity - related packages
+  tensegrity_utils
+  interface
+
 )
 
 set(MSG_FILES "")
@@ -52,7 +55,7 @@ generate_messages(
 # )
 
 catkin_package(
-#  INCLUDE_DIRS include
+ INCLUDE_DIRS include
 #  LIBRARIES mujoco
  CATKIN_DEPENDS roscpp std_msgs message_runtime
 #  DEPENDS system_lib
@@ -90,14 +93,16 @@ foreach(f ${EXECUTABLE_FILES})
   add_executable(${fname} ${f})
   ## Add cmake target dependencies of the executable
   ## same as for the library above
+  target_include_directories(${fname} PUBLIC 
+                            include
+                            ${catkin_INCLUDE_DIRS})
   add_dependencies(${fname}
                    ${${PROJECT_NAME}_EXPORTED_TARGETS} 
                    ${catkin_EXPORTED_TARGETS}
-                   ${PROJECT_NAME}_gencfg
+                   # ${PROJECT_NAME}_gencfg
                    )
   ## Specify libraries to link a library or executable target against
   target_link_libraries(${fname}
-                        ${MJ_LINK}
                         ${catkin_LIBRARIES}
                         ${OpenCV_LIBS} 
                       )

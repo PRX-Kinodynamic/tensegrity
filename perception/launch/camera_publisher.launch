@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="perception" type="camera_publisher" name="camera_publisher" output="screen">
+    <rosparam command="load" file="$(find perception)/config/logitech_brio.yaml" />
+    </node>
+</launch>

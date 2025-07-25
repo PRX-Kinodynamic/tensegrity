@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>utils</name>
+  <name>tensegrity_utils</name>
   <version>0.1.0</version>
   <description>Utilities for the tensegrity repo</description>
 

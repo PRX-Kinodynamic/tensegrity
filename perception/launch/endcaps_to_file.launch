@@ -1,0 +1,37 @@
+<launch>
+    <arg name="data_dir" default="$(env ML4KP_ROS)/data/tensegrity/"/>
+    <arg name="reset_topic" default="/tensegrity/reset"/>
+    <arg name="shutdown_topic" default="/tensegrity/shutdown"/>  <!-- Shutdown NOW -->
+    <arg name="experiment_id" default="2025-01-23_16-38-18"/>
+
+    <group ns="data_collection">
+        <node pkg="nodelet" type="nodelet" name="data_collection_nodelet" args="manager" output="screen">
+          <param name="num_worker_threads" value="4" />
+        </node>
+        <node pkg="nodelet" type="nodelet" name="tensegrity_endcap_red_to_file" 
+            args="load interface/TensegrityEndcapToFile data_collection_nodelet" output="screen">
+            <param name="directory" value="$(arg data_dir)"/>
+            <param name="fileprefix" value="endcap_red_$(arg experiment_id)"/>
+            <param name="topic_name" value="/tensegrity/endcap/red/positions"/>
+            <param name="reset_topic" value="$(arg reset_topic)"/>
+            <param name="shutdown_topic" value="$(arg shutdown_topic)"/>
+        </node>
+        <node pkg="nodelet" type="nodelet" name="tensegrity_endcap_green_to_file" 
+            args="load interface/TensegrityEndcapToFile data_collection_nodelet" output="screen">
+            <param name="directory" value="$(arg data_dir)"/>
+            <param name="fileprefix" value="endcap_green_$(arg experiment_id)"/>
+            <param name="topic_name" value="/tensegrity/endcap/green/positions"/>
+            <param name="reset_topic" value="$(arg reset_topic)"/>
+            <param name="shutdown_topic" value="$(arg shutdown_topic)"/>
+        </node>
+        <node pkg="nodelet" type="nodelet" name="tensegrity_endcap_blue_to_file" 
+            args="load interface/TensegrityEndcapToFile data_collection_nodelet" output="screen">
+            <param name="directory" value="$(arg data_dir)"/>
+            <param name="fileprefix" value="endcap_blue_$(arg experiment_id)"/>
+            <param name="topic_name" value="/tensegrity/endcap/blue/positions"/>
+            <param name="reset_topic" value="$(arg reset_topic)"/>
+            <param name="shutdown_topic" value="$(arg shutdown_topic)"/>
+        </node>
+    </group>
+
+</launch>
