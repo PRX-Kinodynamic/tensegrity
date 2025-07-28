@@ -20,7 +20,7 @@ class ImageFolderPublisher(object):
         
         # print(self.folder)
 
-        self.camera_info_topic = ;
+        # self.camera_info_topic = ;
 
         self.get_images()
 
