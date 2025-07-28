@@ -8,7 +8,7 @@
 #include <sensor_msgs/Image.h>
 
 #include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
+// #include <message_filters/time_synchronizer.h>
 
 namespace perception
 {
