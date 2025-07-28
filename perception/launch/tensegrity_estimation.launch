@@ -50,7 +50,7 @@
         <arg name="high_V" default="140" />
     </include>
 
-  <!--    <node pkg="nodelet" type="nodelet" name="estimation_nodelet"  args="manager" output="screen">
+    <node pkg="nodelet" type="nodelet" name="estimation_nodelet"  args="manager" output="screen">
       <param name="num_worker_threads" value="8" />
     </node>
     <node pkg="nodelet" type="nodelet" name="tensegrity_estimation" 
@@ -62,7 +62,7 @@
         <param name="world_frame" value="world"/>
         <param name="estimation_frequency" value="30"/>
     </node>
- -->
+ 
    <!--  <group ns="viz">
         <node pkg="nodelet" type="nodelet" name="viz_nodelet"  args="manager" output="screen"/>
 
