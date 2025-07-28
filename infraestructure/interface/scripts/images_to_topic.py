@@ -20,16 +20,20 @@ class ImageFolderPublisher(object):
         
         # print(self.folder)
 
+        self.camera_info_topic = ;
+
         self.get_images()
 
         self.bridge = CvBridge()
         self.image_pub = rospy.Publisher(self.topic_name, Image, queue_size=1, latch=True)
+        # self.camera_info_pub = rospy.Publisher(self.camera_info_topic, CameraInfo, queue_size=1, latch=True)
         # self.image_pub_depth = rospy.Publisher("depth_images", Image, queue_size=3)
 
         self.timer = rospy.Timer(rospy.Duration(self.frequency), self.update)
 
         # s = rospy.Service(self.topic_name+'/publish_images', Trigger, self.trigger)
 
+    
     def get_images(self):
         self.image_idx = 0
         self.image_list = glob.glob(self.folder + "/*.png")
@@ -40,11 +44,38 @@ class ImageFolderPublisher(object):
             rospy.logwarn("no images in {}".format(self.folder))
             exit(-1)
 
-    # def trigger(self, req):
-    #     self.get_images()
-    #     if self.timer == None:
-    #         self.timer = rospy.Timer(rospy.Duration(self.frequency), self.update)
-    #     return True
+    def string_to_list_nums(self, list_str):
+
+        p = []
+        for e in list_str:
+            p.append(float(e))
+
+        return p;
+
+    def populate_camera_info(self, params):
+        CameraInfo camera_info;
+
+        # camera_info.header;
+
+        camera_info.height = params["height"];
+        camera_info.width = params["width"];
+
+        camera_info.distortion_model = params["distortion_model"];
+
+        camera_info.D = self.string_to_list_nums(params["distortion"])
+
+        # 3x3 row-major matrix -> [9] nums
+        camera_info.K = self.string_to_list_nums(params["intrinsic"])
+
+        # Stereo Cameras only
+        # 3x3 row-major matrix -> [9] nums 
+        # camera_info.R = self.string_to_list_nums(params["rectification"])
+
+        # Stereo Cameras only
+        # 3x4 row-major matrix -> [12] nums
+        camera_info.P = self.string_to_list_nums(params["projection"])
+
+        return camera_info;
 
     def update(self, event):
         if len(self.image_list) == 0:

@@ -114,8 +114,8 @@ private:
     _int_ext_inv.col(3).head(3) = -R * t;
 
     _int_ext_inv = _int_ext_inv * _intrinsic.inverse();
-    DEBUG_VARS(_intrinsic);
-    DEBUG_VARS(_extrinsic);
+    // DEBUG_VARS(_intrinsic);
+    // DEBUG_VARS(_extrinsic);
 
     // _intrinsic = _intrinsic.inverse();
 
