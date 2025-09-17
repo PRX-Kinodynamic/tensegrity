@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>factor_graphs</name>
+  <version>0.1.0</version>
+  <description>factor graphs - GTSAM bridge and code</description>
+
+  <maintainer email="eg585@rutgers.edu">Edgar</maintainer>
+
+
+  <!-- One license tag required, multiple allowed, one license per tag -->
+  <!-- Commonly used license strings: -->
+  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
+  <license>TODO</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>nodelet</build_depend>
+  <!-- <build_depend>interface</build_depend> -->
+  <build_depend>tf</build_depend>
+
+  <build_export_depend>geometry_msgs</build_export_depend>
+  <build_export_depend>roscpp</build_export_depend>
+  <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>tf</build_export_depend>
+
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>nodelet</exec_depend>
+  <exec_depend>message_runtime</exec_depend>
+
+
+  <!-- The export tag contains other, unspecified, tags -->
+  <!-- <export>
+    <nodelet plugin="${prefix}/src/nodelets/nodelets.xml"/>
+  </export> -->
+</package>

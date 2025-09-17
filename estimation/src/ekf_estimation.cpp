@@ -94,6 +94,8 @@ struct ekf_node_t
 
   ros::Publisher tensegrity_bars_publisher;
 
+  gtsam::LevenbergMarquardtParams lm_params;
+  std::shared_ptr<factor_graphs::levenberg_marquardt_t> lm_helper;
   std::shared_ptr<interface::node_status_t> node_status;
 
   std::shared_ptr<rod_callback_t> red_rod;
@@ -101,8 +103,6 @@ struct ekf_node_t
   std::shared_ptr<rod_callback_t> green_rod;
 
   std::shared_ptr<estimation::cables_callback_t> cables_callback;
-  gtsam::LevenbergMarquardtParams lm_params;
-  std::shared_ptr<factor_graphs::levenberg_marquardt_t> lm_helper;
 
   SE3 red_bar{ factor_graphs::random<SE3>() };
   SE3 green_bar{ factor_graphs::random<SE3>() };
@@ -130,6 +130,10 @@ struct ekf_node_t
     , accum_dt(0)
   {
     double frequency;
+    // lm_params.setVerbosityLM("SILENT");
+    lm_params.setVerbosityLM("SUMMARY");
+    lm_params.setMaxIterations(20);
+    lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/state_estimation/fg", lm_params);
 
     PARAM_SETUP(nh, red_endcaps_topic);
     PARAM_SETUP(nh, blue_endcaps_topic);
@@ -153,14 +157,29 @@ struct ekf_node_t
 
     const ros::Duration ekf_timer(1.0 / frequency);
     _ekf_timer = nh.createTimer(ekf_timer, &This::update, this);
+    const gtsam::Values result{ estimation::compute_initialization(initial_estimate_filename, offset, Roffset) };
 
-    // lm_params.setVerbosityLM("SILENT");
-    lm_params.setVerbosityLM("SUMMARY");
-    lm_params.setMaxIterations(20);
+    // result.print("result", SF::formatter);
 
-    lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/state_estimation/fg", lm_params);
+    gtsam::noiseModel::Base::shared_ptr z_noise{ gtsam::noiseModel::Isotropic::Sigma(6, 1e0) };
 
-    ekf = std::make_shared<EKF>(nullptr, use_cable_sensors);
+    ekf = std::make_shared<EKF>(nh, use_cable_sensors);
+
+    red_bar = result.at<SE3>(estimation::rod_symbol(estimation::RodColors::RED, 0));
+    green_bar = result.at<SE3>(estimation::rod_symbol(estimation::RodColors::GREEN, 0));
+    blue_bar = result.at<SE3>(estimation::rod_symbol(estimation::RodColors::BLUE, 0));
+
+    DEBUG_VARS(red_bar)
+    DEBUG_VARS(green_bar)
+    DEBUG_VARS(blue_bar)
+
+    ekf->set_prior(estimation::RodColors::RED, red_bar, z_noise);
+    ekf->set_prior(estimation::RodColors::GREEN, green_bar, z_noise);
+    ekf->set_prior(estimation::RodColors::BLUE, blue_bar, z_noise);
+
+    // Assuming this is the correct frame...
+    red_rod->frame = "world";
+    estimation::publish_tensegrity_msg(red_bar, green_bar, blue_bar, tensegrity_bars_publisher, "world");
     node_status->status(interface::NodeStatus::READY);
   }
 
@@ -201,25 +220,25 @@ struct ekf_node_t
       if (red_bar_next)
       {
         const SE3 red_diff{ (*red_bar_next).between(red_bar) };
-        // red_vel = SE3::Logmap(red_diff) / accum_dt;
+        red_vel = SE3::Logmap(red_diff) / accum_dt;
         red_bar = *red_bar_next;
       }
       if (green_bar_next)
       {
         const SE3 green_diff{ (*green_bar_next).between(green_bar) };
-        // green_vel = SE3::Logmap(green_diff) / accum_dt;
+        green_vel = SE3::Logmap(green_diff) / accum_dt;
         green_bar = *green_bar_next;
       }
       if (blue_bar_next)
       {
         const SE3 blue_diff{ (*blue_bar_next).between(blue_bar) };
-        // blue_vel = SE3::Logmap(blue_diff) / accum_dt;
+        blue_vel = SE3::Logmap(blue_diff) / accum_dt;
         blue_bar = *blue_bar_next;
       }
       accum_dt = 0;
     }
 
-    // DEBUG_VARS(red_bar);
+    DEBUG_VARS(blue_bar);
     estimation::publish_tensegrity_msg(red_bar, green_bar, blue_bar, tensegrity_bars_publisher, red_rod->frame);
   }
 };

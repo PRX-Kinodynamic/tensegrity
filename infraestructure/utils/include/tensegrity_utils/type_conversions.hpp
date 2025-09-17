@@ -1,6 +1,8 @@
 #pragma once
+#include <ros/ros.h>
 #include <type_traits>
 #include <tensegrity_utils/template_utils.hpp>
+#include <tensegrity_utils/constants.hpp>
 
 namespace tensegrity
 {
@@ -57,6 +59,22 @@ template <typename To, typename From,
 inline To convert_to(const From& value)
 {
   return static_cast<To>(value);
+}
+
+// ROS Types
+template <typename To, typename From,
+          std::enable_if_t<std::is_floating_point<To>::value && std::is_same<From, ros::Time>::value, bool> = true>
+inline To convert_to(const From& value)
+{
+  return static_cast<To>(value.toSec());
+}
+
+template <
+    typename StringType, typename From,
+    std::enable_if_t<std::is_same<StringType, std::string>::value && std::is_same<From, ros::Time>::value, bool> = true>
+inline StringType convert_to(const From& value)
+{
+  return convert_to<std::string>(convert_to<double>(value));
 }
 
 template <typename To, typename From, std::enable_if_t<std::is_same<To, From>::value, bool> = true>

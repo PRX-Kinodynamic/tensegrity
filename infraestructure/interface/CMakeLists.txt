@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 project(interface)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -9,12 +9,29 @@ find_package(catkin REQUIRED COMPONENTS
   # ml4kp_bridge
   roscpp
   std_msgs
+  geometry_msgs
+  sensor_msgs
   roslib
   nodelet
   tf
   tf_conversions
-  # dynamic_reconfigure
+  tensegrity_utils
+  message_generation
+  resource_retriever
+  factor_graphs
+  rosbag
 )
+
+if(DEFINED ENV{Torch_DIR})
+  find_package(Torch REQUIRED)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
+else()
+  message("Please download libtorch C++, place in external folder and setup the enviornmental variable Torch_DIR accordingly.")
+  add_definitions(TORCH_NOT_BUILT)
+endif()
+
+catkin_python_setup()
+
 
 set(MSG_FILES "")
 file(GLOB_RECURSE MSG_DIRS "msg/*.msg")
@@ -53,10 +70,10 @@ generate_messages(
 # )
 
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES mujoco
- CATKIN_DEPENDS roscpp std_msgs message_runtime
-#  DEPENDS system_lib
+ INCLUDE_DIRS include ${TORCH_INCLUDE_DIRS}
+ LIBRARIES ${PROJECT_NAME}
+ CATKIN_DEPENDS roscpp std_msgs message_runtime 
+ # DEPENDS ${TORCH_LIBRARIES}
 )
 
 ###########
@@ -68,7 +85,13 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${TORCH_INCLUDE_DIRS}
 )
+
+add_library(${PROJECT_NAME} INTERFACE)
+add_dependencies(${PROJECT_NAME} ${TORCH_LIBRARIES} ${catkin_LIBRARIES}  )
+target_include_directories(${PROJECT_NAME} INTERFACE include ${TORCH_INCLUDE_DIRS} )
+target_link_libraries(${PROJECT_NAME} INTERFACE ${TORCH_LIBRARIES} ${catkin_LIBRARIES}  )
 
 ## Nodeletes
 set(NODELET_LIB ${PROJECT_NAME}_nodelets)
@@ -80,6 +103,10 @@ if(NOT RES_LEN EQUAL 0)
   target_include_directories(${NODELET_LIB} PUBLIC include ${catkin_INCLUDE_DIRS})
   add_dependencies(${NODELET_LIB} ${${PROJECT_NAME}_EXPORTED_TARGETS}  ${catkin_EXPORTED_TARGETS})
   target_link_libraries(${NODELET_LIB} ${catkin_LIBRARIES} ${OpenCV_LIBS})
+
+  if(BUILD_FOR_TORCH AND DEFINED ENV{Torch_DIR})
+    target_link_libraries(${NODELET_LIB} ${TORCH_LIBRARIES})
+  endif()
 endif()
 
 file(GLOB EXECUTABLE_FILES ${PROJECT_SOURCE_DIR}/src/*.cpp)
@@ -119,7 +146,6 @@ catkin_install_python(PROGRAMS
   # scripts/mushr_open_loop_publisher.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
-
 ## Mark executables for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_executables.html
 # install(TARGETS ${PROJECT_NAME}_node

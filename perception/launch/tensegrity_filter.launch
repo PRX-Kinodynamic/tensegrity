@@ -1,0 +1,31 @@
+<launch>
+    <!-- <arg name="focal_lenght"/> -->
+    <!-- <arg name="optical_center"/> -->
+    <!-- <arg name="camera_extrinsics"/> -->
+    <arg name="camera_frame" default="real_sense"/>
+
+
+    <arg name="observation_freq" default="5"/>
+
+    <arg name="rgba" default="[0,0,0,1]"/>
+
+    <arg name="filters_namespace" default="/camera/filters/"/>
+
+    <arg name="nodelet_name" value="endcap_v2_nodelet" />
+
+    <node pkg="nodelet" type="nodelet" name="$(arg nodelet_name)"  args="manager" output="screen">
+      <param name="num_worker_threads" value="8" />
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="TensegrityFilterNodelet" args="load perception/TensegrityFilterNodelet $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb"/>
+        <param name="publisher_topic" value="/images/rgb/filtered"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)"/>
+        <param name="node_id" value="/nodes/TensegrityFilter"/>
+        <param name="encoding" value="bgr8"/>
+        <param name="kernel_sizes" type="yaml" value="[5,5]"/>
+        <param name="operations" value="DE"/>
+    </node>
+    
+    
+</launch>

@@ -1,0 +1,35 @@
+<launch>
+
+    <arg name="directory"/>
+    <arg name="gt_bars_filename" />
+    <arg name="gt_bars_topicname" />
+    <arg name="estimation_bars_filename" />
+    <arg name="estimation_bars_topicname" />
+
+    <node pkg="nodelet" type="nodelet" name="data_collection_nodelet"  args="manager" output="screen"/>
+
+    <node pkg="nodelet" type="nodelet" name="GTTensegrityBarsToFile" required="true"
+        args="load interface/TensegrityBarsToFile data_collection_nodelet" output="screen">
+        <param name="node_id" value="gt_bars_to_file"/>
+        <param name="filename" value="$(arg directory)/$(arg gt_bars_filename)"/>
+        <param name="tensegrity_bars_topicname" value="$(arg gt_bars_topicname)"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="EstimationTensegrityBarsToFile" required="true"
+        args="load interface/TensegrityBarsToFile data_collection_nodelet" output="screen">
+        <param name="node_id" value="estimation_bars_to_file"/>
+        <param name="filename" value="$(arg directory)/$(arg estimation_bars_filename)"/>
+        <param name="tensegrity_bars_topicname" value="$(arg estimation_bars_topicname)"/>
+    </node>
+
+    <node pkg="interface" type="status_funnel.py" name="data_collection_status_funnel">
+        <param name="output_topic" value="/nodes/data_collection"/>
+        <param name="node_status_topics" type="yaml" 
+            value="[
+                /GTTensegrityBarsToFile/gt_bars_to_file/status/current,
+                /EstimationTensegrityBarsToFile/estimation_bars_to_file/status/current,
+                ]"
+            />
+    </node>
+
+</launch>

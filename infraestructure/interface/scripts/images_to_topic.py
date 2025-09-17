@@ -8,6 +8,8 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import CameraInfo
 from sensor_msgs.msg import Image
 from std_srvs.srv import Trigger
+from interface.msg import TensegrityLengthSensor
+import json
 
 class ImageFolderPublisher(object):
     def __init__(self):
@@ -33,6 +35,16 @@ class ImageFolderPublisher(object):
 
         # s = rospy.Service(self.topic_name+'/publish_images', Trigger, self.trigger)
 
+    def read_length_data(self):
+        directory = os.fsencode(self.folder)
+    
+        for file in os.listdir(directory):
+            filename = os.fsdecode(file)
+            if filename.endswith(".asm") or filename.endswith(".py"): 
+                # print(os.path.join(directory, filename))
+                continue
+            else:
+                continue
     
     def get_images(self):
         self.image_idx = 0
@@ -53,29 +65,28 @@ class ImageFolderPublisher(object):
         return p;
 
     def populate_camera_info(self, params):
-        CameraInfo camera_info;
+        self.camera_info = CameraInfo();
 
         # camera_info.header;
 
-        camera_info.height = params["height"];
-        camera_info.width = params["width"];
+        self.camera_info.height = params["height"];
+        self.camera_info.width = params["width"];
 
-        camera_info.distortion_model = params["distortion_model"];
+        self.camera_info.distortion_model = params["distortion_model"];
 
-        camera_info.D = self.string_to_list_nums(params["distortion"])
+        self.camera_info.D = self.string_to_list_nums(params["distortion"])
 
         # 3x3 row-major matrix -> [9] nums
-        camera_info.K = self.string_to_list_nums(params["intrinsic"])
+        self.camera_info.K = self.string_to_list_nums(params["intrinsic"])
 
         # Stereo Cameras only
         # 3x3 row-major matrix -> [9] nums 
-        # camera_info.R = self.string_to_list_nums(params["rectification"])
+        # self.camera_info.R = self.string_to_list_nums(params["rectification"])
 
         # Stereo Cameras only
         # 3x4 row-major matrix -> [12] nums
-        camera_info.P = self.string_to_list_nums(params["projection"])
+        self.camera_info.P = self.string_to_list_nums(params["projection"])
 
-        return camera_info;
 
     def update(self, event):
         if len(self.image_list) == 0:
@@ -96,7 +107,10 @@ class ImageFolderPublisher(object):
             exit(-1)
 
         img_msg.header.stamp = event.current_real
+        img_msg.header.frame_id = "world"
             
+        # print(f"img_msg.height {img_msg.height}")
+        # print(f"img_msg.width {img_msg.width}")
         self.image_idx +=1
 
         self.image_pub.publish(img_msg)

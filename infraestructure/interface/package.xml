@@ -16,9 +16,12 @@
 
   <build_depend>geometry_msgs</build_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>rospy</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>nodelet</build_depend>
+  <build_depend>tensegrity_utils</build_depend>
+  <build_depend>factor_graphs</build_depend>
 
   <build_export_depend>geometry_msgs</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>

@@ -1,0 +1,23 @@
+<launch>
+
+    <arg name="visualize" default="true"/>
+    <arg name="cable_unit_conversion"/>
+    <arg name="cable_map_filename"/>
+
+	<node pkg="estimation" type="cable_only_estimation" name="cable_only_estimation" output="screen">
+        <param name="tensegrity_pose_topic" value="/tensegrity/poses"/>
+        <!-- <param name="cables_topic" value="/tensegrity/cables"/> -->
+        <param name="sensors_topicname" value="/tensegrity/sensors"/>
+        <param name="cable_unit_conversion" value="$(arg cable_unit_conversion)"/>
+        <param name="cable_map_filename" value="$(arg cable_map_filename)"/>
+    </node>
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="viz_nodelet"  args="manager" output="screen"/>
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="ShapeOnlyBarsToMarkersStateEstimation" 
+        args="load interface/TensegrityBarsToMarkers viz_nodelet" output="screen">
+        <param name="tensegrity_bars_topicname" value="/tensegrity/poses"/>
+        <param name="tensegrity_markers_topicname" value="/tensegrity/markers"/>
+        <param name="node_id" value="/node/ShapeOnlyBarsToMarkersStateEstimation"/>
+    </node>
+</launch>

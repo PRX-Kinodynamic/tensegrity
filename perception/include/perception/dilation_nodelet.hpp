@@ -39,8 +39,10 @@ private:
     PARAM_SETUP(private_nh, encoding);
     PARAM_SETUP_WITH_DEFAULT(private_nh, publish_rgb, publish_rgb);
 
-    _image_subscriber = private_nh.subscribe(subscriber_topic, 1, &Derived::image_callback, this);
     _frame_publisher = private_nh.advertise<sensor_msgs::Image>(publisher_topic, 1, true);
+    if (_publish_rgb)
+      _frame_rgb_publisher = private_nh.advertise<sensor_msgs::Image>(publisher_topic + "/rgb", 1, true);
+    _image_subscriber = private_nh.subscribe(subscriber_topic, 1, &Derived::image_callback, this);
 
     // ROS_ASSERT(kernel_sizes.size() == operations.size(), "kernel_sizes and operations must match");
     for (int i = 0; i < kernel_sizes.size(); ++i)
@@ -50,9 +52,6 @@ private:
                                                     cv::Size(2 * erosion_size + 1, 2 * erosion_size + 1),
                                                     cv::Point(erosion_size, erosion_size)));
     }
-
-    if (_publish_rgb)
-      _frame_rgb_publisher = private_nh.advertise<sensor_msgs::Image>(publisher_topic + "/rgb", 1, true);
   }
 
   void erode_or_dilate(const int idx, const cv::Mat& image_in, cv::Mat& image_out)
@@ -86,13 +85,17 @@ private:
     // cv::dilate(frame->image, _dilation_dst, _element_erosion);
     erode_or_dilate(0, frame->image, _dilation_dst);
 
-    _msg = cv_bridge::CvImage(std_msgs::Header(), _encoding, _dilation_dst).toImageMsg();
+    _msg = cv_bridge::CvImage(message->header, _encoding, _dilation_dst).toImageMsg();
+    _msg->header.stamp = ros::Time::now();
+
     _frame_publisher.publish(_msg);
 
     if (_publish_rgb)
     {
       cv::cvtColor(_dilation_dst, _frame_rgb, cv::COLOR_GRAY2RGB);
-      _msg_rgb = cv_bridge::CvImage(std_msgs::Header(), "rgb8", _frame_rgb).toImageMsg();
+      _msg_rgb = cv_bridge::CvImage(message->header, "rgb8", _frame_rgb).toImageMsg();
+      _msg_rgb->header.stamp = ros::Time::now();
+
       _frame_rgb_publisher.publish(_msg_rgb);
     }
   }

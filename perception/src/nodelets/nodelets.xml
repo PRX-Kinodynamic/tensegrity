@@ -27,4 +27,18 @@
       Get the world position of a circle in an image
     </description>
   </class> 
+  <class name="perception/EndcapToMarker" 
+         type="perception::EndcapToMarker" 
+         base_class_type="nodelet::Nodelet">
+    <description> 
+      Get the world position of a circle in an image
+    </description>
+  </class> 
+  <class name="perception/TensegrityFilterNodelet" 
+         type="perception::TensegrityFilterNodelet" 
+         base_class_type="nodelet::Nodelet">
+    <description> 
+      Get the world position of a circle in an image
+    </description>
+  </class> 
 </library>

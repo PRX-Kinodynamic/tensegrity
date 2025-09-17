@@ -1,0 +1,126 @@
+<launch>
+    <arg name="data_file"/>
+    <arg name="pub_frequency" default="30"/>
+    <arg name="data_frequency" default="200"/>
+    <arg name="loop" default="true"/>
+    <arg name="red_endcaps_topic" default="/tensegrity/endcap/red/positions"/>
+    <arg name="green_endcaps_topic" default="/tensegrity/endcap/green/positions"/>
+    <arg name="blue_endcaps_topic" default="/tensegrity/endcap/blue/positions"/>
+    <arg name="tensegrity_gt_topic" default="/tensegrity/gt"/>
+    <arg name="cable_topic" default="/tensegrity/cables"/>
+    <arg name="endcap_noise_sigma" default="0.0"/>
+    <arg name="endcap_miss_probability" default="0.0"/>
+    <arg name="cables_noise_mu" default="0.0"/>
+    <arg name="cables_noise_sigma" default="0.0"/>
+    <arg name="data_scale_factor" default="0.10"/>
+    <arg name="sim_clock" default="false"/>
+    <arg name="endcap_swap_probability" default="0.0"/>
+    <arg name="visualize" default="true"/>
+
+    <param name="/use_sim_time" value="$(arg sim_clock)" />
+    <node if="$(arg sim_clock)" pkg="tensegrity_utils" type="sim_clock" name="sim_clock" output="screen" />
+
+    <node pkg="interface" type="sim_data_publisher.py" name="sim_data_publisher" output="screen" required="true">
+        <param name="red_endcaps_topic" value="$(arg red_endcaps_topic)" />
+        <param name="green_endcaps_topic" value="$(arg green_endcaps_topic)" />
+        <param name="blue_endcaps_topic" value="$(arg blue_endcaps_topic)" />
+        <param name="bar_gt_topic" value="$(arg tensegrity_gt_topic)" />
+        <param name="pub_frequency" value="$(arg pub_frequency)" />
+        <param name="data_frequency" value="$(arg data_frequency)" />
+        <param name="loop" value="$(arg loop)" />
+        <param name="data_file" value="$(arg data_file)" />
+        <param name="cable_topic" value="$(arg cable_topic)"/>
+        <param name="offset_to_origin" value="true"/>
+        <!-- <param name="offset_to_origin" value="$(arg offset_to_origin)"/> -->
+        <param name="endcap_noise_mu" value="0.0"/>
+        <param name="endcap_noise_sigma" value="$(arg endcap_noise_sigma)"/>
+        <param name="endcap_miss_probability" value="$(arg endcap_miss_probability)"/>
+        <param name="cables_noise_mu" value="$(arg cables_noise_mu)"/>
+        <param name="cables_noise_sigma" value="$(arg cables_noise_sigma)"/>
+        <param name="data_scale_factor" value="$(arg data_scale_factor)"/>
+        <param name="endcap_swap_probability" value="$(arg endcap_swap_probability)"/>
+    </node>
+
+    <group if="$(arg visualize)" ns="viz">
+        <node pkg="nodelet" type="nodelet" name="viz_nodelet"  args="manager" output="screen"/>
+
+        <node pkg="nodelet" type="nodelet" name="red_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="$(arg red_endcaps_topic)/gt" />
+            <param name="rgba" type="yaml" value="[1.0, 0.0, 0.0, 0.5]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="10" />
+            <param name="node_id" value="red_endcap_to_marker_gt"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="green_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="$(arg green_endcaps_topic)/gt" />
+            <param name="rgba" type="yaml" value="[0.0, 1.0, 0.0, 0.5]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="10" />
+            <param name="node_id" value="green_endcap_to_marker_gt"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="blue_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="$(arg blue_endcaps_topic)/gt" />
+            <param name="rgba" type="yaml" value="[0.0, 0.0, 1.0, 0.5]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="10" />
+            <param name="node_id" value="blue_endcap_to_marker_gt"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="red_endcap_to_marker" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="$(arg red_endcaps_topic)" />
+            <param name="rgba" type="yaml" value="[1.0, 0.0, 0.0, 1.0]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="10" />
+            <param name="node_id" value="red_endcap_to_marker"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="green_endcap_to_marker" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="$(arg green_endcaps_topic)" />
+            <param name="rgba" type="yaml" value="[0.0, 1.0, 0.0, 1.0]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="10" />
+            <param name="node_id" value="green_endcap_to_marker"/>
+        </node>
+
+        <node pkg="nodelet" type="nodelet" name="blue_endcap_to_marker" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="$(arg blue_endcaps_topic)" />
+            <param name="rgba" type="yaml" value="[0.0, 0.0, 1.0, 1.0]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="10" />
+            <param name="node_id" value="blue_endcap_to_marker"/>
+        </node>
+
+
+        <node pkg="nodelet" type="nodelet" name="BarsToMarkers" 
+            args="load interface/TensegrityBarsToMarkers viz_nodelet" output="screen">
+            <param name="tensegrity_bars_topicname" value="$(arg tensegrity_gt_topic)"/>
+            <param name="tensegrity_markers_topicname" value="$(arg tensegrity_gt_topic)/markers"/>
+            <param name="alpha" value="0.1"/>
+            <param name="node_id" value="BarsToMarkers"/>
+        </node>
+
+        <node pkg="interface" type="status_funnel.py" name="viz_sim_data_status_funnel">
+            <param name="output_topic" value="sim"/>
+            <param name="node_status_topics" type="yaml" 
+                value="[
+                    /viz/BarsToMarkers/BarsToMarkers/status/current,
+                    /viz/blue_endcap_to_marker/blue_endcap_to_marker/status/current,
+                    /viz/blue_endcap_to_marker_gt/blue_endcap_to_marker_gt/status/current,
+                    /viz/green_endcap_to_marker/green_endcap_to_marker/status/current,
+                    /viz/green_endcap_to_marker_gt/green_endcap_to_marker_gt/status/current,
+                    /viz/red_endcap_to_marker/red_endcap_to_marker/status/current,
+                    /viz/red_endcap_to_marker_gt/red_endcap_to_marker_gt/status/current
+                    ]"
+                />
+        </node>
+
+    </group>
+
+
+
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="tf_world" 
+        args="0 0 0 0 0 0 1 world map" />
+</launch>

@@ -1,7 +1,22 @@
-<library path="lib/libperception_nodelets">
-  <!-- <class name="estimation/aruco_cTw_nodelet_t" type="estimation::aruco_cTw_nodelet_t" base_class_type="nodelet::Nodelet">
+<library path="lib/libinterface_nodelets">
+  <class name="interface/TensegrityBarsToMarkers" type="interface::TensegrityBarsToMarkers" 
+    base_class_type="nodelet::Nodelet">
     <description> 
-      Description
+      TensegrityBars msg to markers using meshes
     </description>
-  </class> -->
+  </class>
+
+  <class name="interface/TensegrityBarsToFile" type="interface::TensegrityBarsToFile" 
+    base_class_type="nodelet::Nodelet">
+    <description> 
+      TensegrityBars msg to a txt file
+    </description>
+  </class>
+
+  <class name="interface/TensegrityTrajectoryToMarkers" type="interface::TensegrityTrajectoryToMarkers" 
+    base_class_type="nodelet::Nodelet">
+    <description> 
+      TensegrityBars msg to a txt file
+    </description>
+  </class>
 </library>

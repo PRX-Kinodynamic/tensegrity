@@ -1,0 +1,9 @@
+<launch>
+    <arg name="camera_info_file"/>
+
+     <node pkg="interface" type="camera_info_publisher.py" name="camera_info_publisher"
+         output="screen" required="true">
+        <rosparam command="load" file="$(arg camera_info_file)" />
+    </node>
+
+</launch>

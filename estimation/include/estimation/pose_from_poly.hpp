@@ -9,26 +9,21 @@
 #include <geometry_msgs/PoseArray.h>
 #include <tf2_ros/transform_broadcaster.h>
 
-// mj-ros
-#include <utils/rosparams_utils.hpp>
-#include <ml4kp_bridge/defs.h>
-#include <ml4kp_bridge/fg_utils.hpp>
-#include <estimation/TrajectoryEstimation.h>
-#include <estimation/StateEstimation.h>
-#include <estimation/fg_trajectory_estimation.hpp>
-#include <analytical/fg_ltv_sde.hpp>
-#include <utils/std_utils.hpp>
-#include <utils/dbg_utils.hpp>
-#include <interface/TensegrityEndcaps.h>
-#include <estimation/ty_endcap_dyn_z_factor.hpp>
+// tensegrity
+#include <tensegrity_utils/rosparams_utils.hpp>
+#include <tensegrity_utils/std_utils.hpp>
+#include <tensegrity_utils/dbg_utils.hpp>
+// #include <ml4kp_bridge/defs.h>
+// #include <ml4kp_bridge/fg_utils.hpp>
+// #include <estimation/TrajectoryEstimation.h>
+// #include <estimation/StateEstimation.h>
+// #include <estimation/fg_trajectory_estimation.hpp>
+// #include <analytical/fg_ltv_sde.hpp>
+// #include <interface/TensegrityEndcaps.h>
+// #include <estimation/ty_endcap_dyn_z_factor.hpp>
+#include <interface/defs.hpp>
 
-// ML4KP
-#include <prx/factor_graphs/utilities/symbols_factory.hpp>
-#include <prx/factor_graphs/lie_groups/lie_integrator.hpp>
-#include <prx/factor_graphs/factors/euler_integration_factor.hpp>
-#include <prx/factor_graphs/factors/se3_observation.hpp>
-#include <prx/factor_graphs/utilities/values_utilities.hpp>
-#include <prx/factor_graphs/utilities/dbg_utills.hpp>
+#include <factor_graphs/defs.hpp>
 
 // Gtsam
 #include <gtsam/basis/FitBasis.h>
@@ -46,9 +41,9 @@ class pose_from_poly_t : public Base
   using Values = gtsam::Values;
   using FactorGraph = gtsam::NonlinearFactorGraph;
 
-  using SF = prx::fg::symbol_factory_t;
+  using SF = factor_graphs::symbol_factory_t;
 
-  using SE3 = prx::fg::se3_t;
+  using SE3 = gtsam::Pose3;
   using PolyMatrix = Eigen::Matrix<double, DIM, -1>;
 
 public:
@@ -56,7 +51,7 @@ public:
   {
   }
 
-  ~pose_from_poly_t() {};
+  ~pose_from_poly_t(){};
 
   virtual void onInit()
   {
@@ -84,7 +79,7 @@ public:
 
     DEBUG_VARS(matrix_values.size(), matrix_values.size() / DIM);
     PolyMatrix in_matrix{ PolyMatrix::Zero(DIM, polynoimal_degree) };
-    ml4kp_bridge::copy(in_matrix, matrix_values);
+    interface::copy(in_matrix, matrix_values);
     _poly_matrix = gtsam::ParameterMatrix<DIM>(in_matrix);
     // DEBUG_VARS(_poly_matrix);
 
@@ -106,7 +101,7 @@ private:
       const SE3 se3{ f(_poly_matrix) };
 
       _pose_arr_msg.poses.emplace_back();
-      ml4kp_bridge::copy(_pose_arr_msg.poses.back(), se3);
+      interface::copy(_pose_arr_msg.poses.back(), se3);
     }
     DEBUG_VARS(_pose_arr_msg.poses.size());
 
@@ -129,7 +124,7 @@ private:
       const gtsam::Chebyshev2::ManifoldEvaluationFunctor<SE3> f(_N, dt, _a, _b);
       const SE3 se3{ f(_poly_matrix) };
 
-      ml4kp_bridge::copy(_pose_msg, se3);
+      interface::copy(_pose_msg, se3);
       _se3_publisher.publish(_pose_msg);
     }
   }

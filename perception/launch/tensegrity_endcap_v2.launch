@@ -1,0 +1,106 @@
+<launch>
+    <!-- <arg name="focal_lenght"/> -->
+    <!-- <arg name="optical_center"/> -->
+    <!-- <arg name="camera_extrinsics"/> -->
+    <arg name="camera_frame" default="real_sense"/>
+
+
+    <arg name="observation_freq" default="5"/>
+
+    <!-- <arg name="color" /> -->
+    <arg name="endcap_id"/>
+    <arg name="rgba" default="[0,0,0,1]"/>
+
+    <arg name="filters_namespace" default="/camera/filters/"/>
+
+    <arg name="nodelet_name" value="endcap_v2_nodelet" />
+
+    <node pkg="nodelet" type="nodelet" name="$(arg nodelet_name)"  args="manager" output="screen">
+      <param name="num_worker_threads" value="8" />
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="BlackFilterrgb" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb"/>
+        <param name="publisher_topic" value="/images/rgb/black"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)/black/"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="node_id" value="/nodes/BlackFilter"/>
+        <param name="encoding" value="mono8"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="ColorFilterred" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb"/>
+        <param name="publisher_topic" value="/images/rgb/red"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)/red/"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="encoding" value="mono8"/>
+        <param name="node_id" value="/nodes/ColorFilterred"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="ColorFiltergreen" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb"/>
+        <param name="publisher_topic" value="/images/rgb/green"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)/green/"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="encoding" value="mono8"/>
+        <param name="node_id" value="/nodes/ColorFiltergreen"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="ColorFilterblue" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb"/>
+        <param name="publisher_topic" value="/images/rgb/blue"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)/blue/"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="encoding" value="mono8"/>
+        <param name="node_id" value="/nodes/ColorFilterblue"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="redOrBlackMask" args="load perception/MaskImage $(arg nodelet_name)" output="screen">
+        <param name="image_topic" value="/images/rgb/red"/>
+        <param name="mask_topic" value="/images/rgb/black"/>
+        <param name="publisher_topic" value="/images/rgb/black_red"/>
+        <param name="encoding" value="mono8"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="operation" value="or"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="greenOrBlackMask" args="load perception/MaskImage $(arg nodelet_name)" output="screen">
+        <param name="image_topic" value="/images/rgb/green"/>
+        <param name="mask_topic" value="/images/rgb/black_red"/>
+        <param name="publisher_topic" value="/images/rgb/black_green"/>
+        <param name="encoding" value="mono8"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="operation" value="or"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="blueOrBlackMask" args="load perception/MaskImage $(arg nodelet_name)" output="screen">
+        <param name="image_topic" value="/images/rgb/blue"/>
+        <param name="mask_topic" value="/images/rgb/black_green"/>
+        <param name="publisher_topic" value="/images/rgb/black_rgb"/>
+        <param name="encoding" value="mono8"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="operation" value="or"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="Denoise" args="load perception/DilateImage $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb/black_rgb"/>
+        <param name="publisher_topic" value="/images/rgb/black_rgb/denoise"/>
+        <param name="kernel_sizes" type="yaml" value="[3,7]"/>
+        <param name="operations" value="ED"/>
+        <param name="encoding" value="mono8"/>
+        <param name="publish_rgb" value="false"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="rgbBlackMask" args="load perception/MaskImage $(arg nodelet_name)" output="screen">
+        <param name="image_topic" value="/images/rgb"/>
+        <param name="mask_topic" value="/images/rgb/black"/>
+        <param name="publisher_topic" value="/images/rgb/masked"/>
+        <param name="encoding" value="bgr8"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="operation" value="copy"/>
+    </node>
+
+    
+    
+    
+</launch>

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <tensegrity_utils/type_conversions.hpp>
-
+#include <std_msgs/Header.h>
 namespace tensegrity
 {
 namespace utils
@@ -43,6 +43,13 @@ static std::string timestamp()
   std::stringstream strstr{};
   strstr << std::put_time(&tm, "%y%m%d_%H%M%S");
   return strstr.str();
+}
+
+void init_header(std_msgs::Header& msg, const std::string& frame)
+{
+  msg.seq = 0;
+  msg.stamp = ros::Time::now();
+  msg.frame_id = frame;
 }
 
 void update_header(std_msgs::Header& msg)

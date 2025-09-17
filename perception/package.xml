@@ -20,10 +20,12 @@
   <build_depend>message_generation</build_depend>
   <build_depend>nodelet</build_depend>
   <build_depend>tensegrity_utils</build_depend>
+  <build_depend>tf</build_depend>
 
   <build_export_depend>geometry_msgs</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
   <build_export_depend>std_msgs</build_export_depend>
+  <build_export_depend>tf</build_export_depend>
 
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>ml4kp_bridge</exec_depend>

@@ -3,7 +3,7 @@
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.hpp>
 
-#include <ml4kp_bridge/defs.h>
+// #include <ml4kp_bridge/defs.h>
 
 #include <estimation/tensegrity_estimation.hpp>
 #include <estimation/pose_from_poly.hpp>

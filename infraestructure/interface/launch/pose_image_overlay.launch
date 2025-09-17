@@ -1,0 +1,21 @@
+<launch>
+    <arg name="rgb_img_topic"/>
+    <arg name="topic_overlay"/>
+    <arg name="topic_endcap_only"/>
+    <arg name="topic_tensegrity_bars"/>
+    <arg name="max_images"/>
+    <arg name="camera_info_topic"/>
+    <arg name="rod_mesh_file" default="$(find interface)/models/bars/struct_with_socks.glb"/>
+
+    <node pkg="interface" type="pose_image_overlay.py" name="pose_image_overlay"
+         output="screen" required="true">
+        <param name="rgb_img_topic" value="$(arg rgb_img_topic)" />
+        <param name="topic_overlay" value="$(arg topic_overlay)" />
+        <param name="topic_endcap_only" value="$(arg topic_endcap_only)" />
+        <param name="topic_tensegrity_bars" value="$(arg topic_tensegrity_bars)" />
+        <param name="max_images" value="$(arg max_images)" />
+        <param name="camera_info_topic" value="$(arg camera_info_topic)" />
+        <param name="rod_mesh_file" value="$(arg rod_mesh_file)" />
+    </node>
+
+</launch>

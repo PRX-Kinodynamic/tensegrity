@@ -4,8 +4,10 @@
 
 #include <perception/color_filter.hpp>
 #include <perception/dilation_nodelet.hpp>
-#include <perception/mask_nodelet.hpp>
 #include <perception/endcap_position_detector_nodelet.hpp>
+#include <perception/mask_nodelet.hpp>
+#include <perception/endcap_to_marker.hpp>
+#include <perception/tensegrity_filter_nodelet.hpp>
 
 namespace perception
 {
@@ -14,6 +16,8 @@ using ColorFilter = color_filter_t<nodelet::Nodelet>;
 using DilateImage = dilation_nodelet_t<nodelet::Nodelet>;
 using MaskImage = mask_nodelet_t<nodelet::Nodelet>;
 using EndcapPosition = endcap_position_detector_nodelet_t<nodelet::Nodelet>;
+using EndcapToMarker = endcap_to_marker_t<nodelet::Nodelet>;
+using TensegrityFilterNodelet = tensegrity_filter_nodelet_t<nodelet::Nodelet>;
 
 }  // namespace perception
 
@@ -21,3 +25,5 @@ PLUGINLIB_EXPORT_CLASS(perception::ColorFilter, nodelet::Nodelet);
 PLUGINLIB_EXPORT_CLASS(perception::DilateImage, nodelet::Nodelet);
 PLUGINLIB_EXPORT_CLASS(perception::MaskImage, nodelet::Nodelet);
 PLUGINLIB_EXPORT_CLASS(perception::EndcapPosition, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS(perception::EndcapToMarker, nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS(perception::TensegrityFilterNodelet, nodelet::Nodelet);

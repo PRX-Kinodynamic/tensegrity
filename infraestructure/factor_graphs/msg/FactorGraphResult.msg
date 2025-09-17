@@ -1,0 +1,3 @@
+float64 initial_error
+float64 final_error
+int64 size

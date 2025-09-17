@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 project(perception)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -9,14 +9,18 @@ find_package(catkin REQUIRED COMPONENTS
   tensegrity_utils
   roscpp
   std_msgs
+  geometry_msgs
   roslib
   nodelet
   tf
+  tf2
   tf_conversions
   # Tensegrity - related packages
   tensegrity_utils
   interface
-
+  factor_graphs
+  dynamic_reconfigure
+  estimation
 )
 
 set(MSG_FILES "")
@@ -40,6 +44,7 @@ endforeach()
 generate_messages(
   DEPENDENCIES
   std_msgs
+  geometry_msgs
 )
 ###################################
 ## catkin specific configuration ##
@@ -53,11 +58,15 @@ generate_messages(
 # generate_dynamic_reconfigure_options(
 #   cfg/MushrEstimator.cfg
 # )
+generate_dynamic_reconfigure_options(
+  cfg/*.cfg
+)
+
 
 catkin_package(
  INCLUDE_DIRS include
 #  LIBRARIES mujoco
- CATKIN_DEPENDS roscpp std_msgs message_runtime
+ CATKIN_DEPENDS roscpp std_msgs message_runtime geometry_msgs
 #  DEPENDS system_lib
 )
 
@@ -72,6 +81,8 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+# add_dependencies(example_node ${PROJECT_NAME}_gencfg)
+
 ## Nodeletes
 set(NODELET_LIB ${PROJECT_NAME}_nodelets)
 file(GLOB NODELET_FILES ${PROJECT_SOURCE_DIR}/src/nodelets/*.cpp)
@@ -81,7 +92,11 @@ list(LENGTH NODELET_FILES RES_LEN)
 if(NOT RES_LEN EQUAL 0) 
   add_library(${NODELET_LIB} ${NODELET_FILES})
   target_include_directories(${NODELET_LIB} PUBLIC include ${catkin_INCLUDE_DIRS})
-  add_dependencies(${NODELET_LIB} ${${PROJECT_NAME}_EXPORTED_TARGETS}  ${catkin_EXPORTED_TARGETS})
+  add_dependencies(${NODELET_LIB} 
+    ${${PROJECT_NAME}_EXPORTED_TARGETS}
+    ${catkin_EXPORTED_TARGETS}
+    ${PROJECT_NAME}_gencfg
+    )
   target_link_libraries(${NODELET_LIB} ${catkin_LIBRARIES} ${OpenCV_LIBS})
 endif()
 

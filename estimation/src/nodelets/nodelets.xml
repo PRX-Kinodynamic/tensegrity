@@ -1,7 +1,7 @@
 <library path="lib/libestimation_nodelets">
-  <!-- <class name="estimation/aruco_cTw_nodelet_t" type="estimation::aruco_cTw_nodelet_t" base_class_type="nodelet::Nodelet">
+  <class name="estimation/TensegrityEstimation" type="estimation::TensegrityEstimation" base_class_type="nodelet::Nodelet">
     <description> 
-      Nodelet to get poses from opencvPNP
+      Nodelet to get poses from FG
     </description>
-  </class> -->
+  </class> 
 </library>

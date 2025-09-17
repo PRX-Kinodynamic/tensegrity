@@ -1,0 +1,63 @@
+<launch>
+  <arg name="color"/>
+  <arg name="filename_prefix" default="test"/>
+  <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_$(arg color)">
+    <param name="image_topic" value="/images/rgb/"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_rgb"/>
+  </node>
+ 
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_color_$(arg color)">
+    <param name="image_topic" value="/images/rgb/$(arg color)"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_color"/>
+  </node>
+
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_$(arg color)_black"  output="screen">
+    <param name="image_topic" value="/images/rgb/$(arg color)/black"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_black"/>
+  </node>
+
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_$(arg color)_dilated">
+    <param name="image_topic" value="/images/rgb/$(arg color)/black/dilated"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <!-- <param name="encoding" value="mono8"/> -->
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_dilated"/>
+  </node>
+
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_$(arg color)_denoise">
+    <param name="image_topic" value="/images/rgb/$(arg color)/denoise"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_denoise"/>
+  </node> 
+
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_$(arg color)_masked">
+    <param name="image_topic" value="/images/rgb/$(arg color)/masked"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_masked"/>
+  </node>
+
+  <node pkg="perception" type="topic_to_video" name="topic_to_video_$(arg color)_positions">
+    <param name="image_topic" value="/images/rgb/$(arg color)/positions"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_$(arg color)_positions"/>
+  </node> 
+
+</launch>

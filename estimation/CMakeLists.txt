@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.15)
 project(estimation)
 set(CMAKE_CXX_STANDARD 17)
 
@@ -6,14 +6,15 @@ set(CMAKE_CXX_STANDARD 17)
 
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
-  # ml4kp_bridge
   roscpp
   std_msgs
   roslib
   nodelet
   tf
   tf_conversions
-  # dynamic_reconfigure
+  interface
+  tensegrity_utils
+  factor_graphs
 )
 
 set(MSG_FILES "")
@@ -54,7 +55,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES mujoco
- CATKIN_DEPENDS roscpp std_msgs message_runtime
+ CATKIN_DEPENDS roscpp std_msgs message_runtime interface
 #  DEPENDS system_lib
 )
 

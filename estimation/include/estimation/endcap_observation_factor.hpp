@@ -5,20 +5,20 @@
 #include <gtsam/base/Testable.h>
 #include <gtsam/nonlinear/Expression.h>
 #include <gtsam/nonlinear/NonlinearFactor.h>
-#include <prx/factor_graphs/lie_groups/se3.hpp>
-#include <prx/factor_graphs/lie_groups/lie_integrator.hpp>
+// #include <prx/factor_graphs/se3.hpp>
+#include <factor_graphs/lie_integrator.hpp>
 
 namespace estimation
 {
 // Endcap is observed P=(x,y,z) at time t+epsilon. The endcap's bar pose is q_t and velocity \dot{q}_t at time t.
 // The prediction first "moves" q_t to q_{t+epsilon} using \dot{q} and then finds the position of the endcap given the
 // offset.
-class endcap_dynamic_observation_t : public gtsam::NoiseModelFactor1<prx::fg::se3_t, Eigen::Vector<double, 6>>
+template <typename SE3>
+class endcap_observation_t : public gtsam::NoiseModelFactor1<SE3, Eigen::Vector<double, 6>>
 {
-  using Base = gtsam::NoiseModelFactor1<prx::fg::se3_t, Eigen::Vector<double, 6>>;
+  using Base = gtsam::NoiseModelFactor1<SE3, Eigen::Vector<double, 6>>;
 
 public:
-  using SE3 = prx::fg::se3_t;
   using Velocity = Eigen::Vector<double, 6>;
   using Translation = Eigen::Vector<double, 3>;
   using Observation = Eigen::Vector<double, 3>;
@@ -26,15 +26,15 @@ public:
   using SkewMatrix = Eigen::Matrix<double, 3, 3>;
   using Jacobian36 = Eigen::Matrix<double, 3, 6>;
   using NoiseModel = gtsam::noiseModel::Base::shared_ptr;
-  using LieIntegrator = prx::fg::lie_integrator_t<SE3, Velocity>;
+  using LieIntegrator = factor_graphs::lie_integrator_t<SE3, Velocity>;
 
   // using Vector = Eigen::Vector<double, Dim>;
   static constexpr Eigen::Index DimX{ 6 };
   static constexpr Eigen::Index DimXdot{ 6 };
   static constexpr Eigen::Index DimZ{ 3 };
 
-  endcap_dynamic_observation_t(const gtsam::Key kse3, const gtsam::Key kvel, const Translation offset,
-                               const Observation z, const double dt, const NoiseModel& cost_model)
+  endcap_observation_t(const gtsam::Key kse3, const gtsam::Key kvel, const Translation offset, const Observation z,
+                       const double dt, const NoiseModel& cost_model)
     : Base(cost_model, kse3, kvel), _offset(offset), _z(z), _dt(dt)
   {
   }
@@ -57,7 +57,7 @@ public:
     if (Hx or Hxdot)
     {
       Jacobian36 pr_H_xt{ Jacobian36::Zero() };  // Deriv error wrt between
-      const Rotation R{ xt.rotation_matrix() };
+      const Rotation R{ xt.rotation().matrix() };
       const SkewMatrix sk{ gtsam::skewSymmetric(-offset[0], -offset[1], -offset[2]) };
       pr_H_xt.leftCols<3>() = R * sk;
       pr_H_xt.rightCols<3>() = R;

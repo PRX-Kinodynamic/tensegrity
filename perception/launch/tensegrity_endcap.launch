@@ -1,12 +1,15 @@
 <launch>
-    <arg name="focal_lenght" default="[607.6858520507812,607.9865112304688]"/>
-    <arg name="optical_center" default="[326.55035400390625,250.6623992919922]"/>
-    <arg name="camera_extrinsics" default="[0.999,-0.0,-0.037,-0.597,0.0,-1.0,0.013,0.729,-0.037,-0.013,-0.999,2.458]"/>
+    <!-- <arg name="focal_lenght"/> -->
+    <!-- <arg name="optical_center"/> -->
+    <!-- <arg name="camera_extrinsics"/> -->
+    <arg name="camera_frame" default="real_sense"/>
+
 
     <arg name="observation_freq" default="5"/>
 
     <arg name="color" />
     <arg name="endcap_id"/>
+    <arg name="rgba" default="[0,0,0,1]"/>
 
     <arg name="low_H"/>
     <arg name="low_S"/>
@@ -14,6 +17,9 @@
     <arg name="high_H"/>
     <arg name="high_S"/>
     <arg name="high_V"/>
+    <arg name="filters_namespace"/>
+
+    <arg name="depth_scale"/>
 
     <arg name="nodelet_name" value="endcap_$(arg color)_nodelet" />
 
@@ -24,42 +30,52 @@
     <node pkg="nodelet" type="nodelet" name="BlackColorFilter$(arg color)" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
         <param name="subscriber_topic" value="/images/rgb"/>
         <param name="publisher_topic" value="/images/rgb/$(arg color)/black"/>
-        <param name="low_H" value="0"/>
-        <param name="low_S" value="0"/>
-        <param name="low_V" value="0"/>
-        <param name="high_H" value="180"/>
-        <param name="high_S" value="255"/>
-        <param name="high_V" value="60"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)/black/"/>
         <param name="publish_rgb" value="false"/>
+        <param name="node_id" value="/nodes/BlackColorFilter$(arg color)"/>
         <param name="encoding" value="mono8"/>
     </node>
 
     <node pkg="nodelet" type="nodelet" name="ColorFilter$(arg color)" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
         <param name="subscriber_topic" value="/images/rgb"/>
         <param name="publisher_topic" value="/images/rgb/$(arg color)"/>
-        <param name="low_H" value="$(arg low_H)"/>
-        <param name="low_S" value="$(arg low_S)"/>
-        <param name="low_V" value="$(arg low_V)"/>
-        <param name="high_H" value="$(arg high_H)"/>
-        <param name="high_S" value="$(arg high_S)"/>
-        <param name="high_V" value="$(arg high_V)"/>
+        <param name="filters_namespace" value="$(arg filters_namespace)/$(arg color)/"/>
         <param name="publish_rgb" value="false"/>
         <param name="encoding" value="mono8"/>
+        <param name="node_id" value="/nodes/ColorFilter$(arg color)"/>
     </node>
 
-    <node pkg="nodelet" type="nodelet" name="DilateImageBlack$(arg color)" args="load perception/DilateImage $(arg nodelet_name)" output="screen">
+    <node pkg="nodelet" type="nodelet" name="$(arg color)OrBlackMask" args="load perception/MaskImage $(arg nodelet_name)" output="screen">
+        <param name="image_topic" value="/images/rgb/$(arg color)"/>
+        <param name="mask_topic" value="/images/rgb/$(arg color)/black"/>
+        <param name="publisher_topic" value="/images/rgb/$(arg color)/or_masked"/>
+        <param name="encoding" value="mono8"/>
+        <param name="publish_rgb" value="false"/>
+        <param name="operation" value="or"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="DilateMaskedImage$(arg color)" args="load perception/DilateImage $(arg nodelet_name)" output="screen">
+        <param name="subscriber_topic" value="/images/rgb/$(arg color)/or_masked"/>
+        <param name="publisher_topic" value="/images/rgb/$(arg color)/or_dilated"/>
+        <param name="kernel_sizes" type="yaml" value="[2,5]"/>
+        <param name="operations" value="ED"/>
+        <param name="encoding" value="mono8"/>
+        <param name="publish_rgb" value="false"/>
+    </node>
+
+    <!-- <node pkg="nodelet" type="nodelet" name="DilateImageBlack$(arg color)" args="load perception/DilateImage $(arg nodelet_name)" output="screen">
         <param name="subscriber_topic" value="/images/rgb/$(arg color)/black"/>
         <param name="publisher_topic" value="/images/rgb/$(arg color)/black/dilated"/>
         <param name="kernel_sizes" type="yaml" value="[2,15]"/>
         <param name="operations" value="ED"/>
         <param name="encoding" value="mono8"/>
         <param name="publish_rgb" value="false"/>
-    </node>
+    </node> -->
 
     <node pkg="nodelet" type="nodelet" name="Denoise$(arg color)" args="load perception/DilateImage $(arg nodelet_name)" output="screen">
         <param name="subscriber_topic" value="/images/rgb/$(arg color)"/>
         <param name="publisher_topic" value="/images/rgb/$(arg color)/denoise"/>
-        <param name="kernel_sizes" type="yaml" value="[1,3]"/>
+        <param name="kernel_sizes" type="yaml" value="[2,5]"/>
         <param name="operations" value="ED"/>
         <param name="encoding" value="mono8"/>
         <param name="publish_rgb" value="false"/>
@@ -67,7 +83,7 @@
 
     <node pkg="nodelet" type="nodelet" name="$(arg color)BlackMask" args="load perception/MaskImage $(arg nodelet_name)" output="screen">
         <param name="image_topic" value="/images/rgb/$(arg color)/denoise"/>
-        <param name="mask_topic" value="/images/rgb/$(arg color)/black/dilated"/>
+        <param name="mask_topic" value="/images/rgb/$(arg color)/or_dilated"/>
         <param name="publisher_topic" value="/images/rgb/$(arg color)/masked"/>
         <param name="encoding" value="mono8"/>
         <param name="publish_rgb" value="false"/>
@@ -78,15 +94,23 @@
         <param name="depth_topic" value="/images/depth"/>
         <param name="image_publisher_topic" value="/images/rgb/$(arg color)/positions"/>
         <param name="endcap_publisher_topic" value="/tensegrity/endcap/$(arg color)/positions"/>
-        <param name="depth_scale" value="4000"/>
+        <param name="depth_scale" value="$(arg depth_scale)"/>
         <param name="observation_freq" value="$(arg observation_freq)"/>
         <param name="viz_image_topic" value="/images/rgb"/>
         <param name="encoding" value="bgr8"/>
         <param name="visualize" value="true"/>
+        <param name="camera_info_topic" value="/real_sense/info"/>
         <param name="endcap_id" value="$(arg endcap_id)"/> <!-- one hot RGB -->
-        <param name="focal_lenght" type="yaml" value="$(arg focal_lenght)"/>
-        <param name="optical_center" type="yaml" value="$(arg optical_center)"/>
-        <param name="camera_extrinsics" type="yaml" value="$(arg camera_extrinsics)"/>
+        <!-- <param name="focal_lenght" type="yaml" value="$(arg focal_lenght)"/> -->
+        <!-- <param name="optical_center" type="yaml" value="$(arg optical_center)"/> -->
+        <!-- <param name="camera_extrinsics" type="yaml" value="$(arg camera_extrinsics)"/> -->
+        <!-- <param name="camera_extrinsics" type="yaml" value="[0.9990,         0,   -0.0370, 0.6873, 0,   -1.0000,   -0.0130, 0.7610,-0.0370,    0.0130,   -0.9990, 2.4240]"/> -->
+        <param name="marker_topicname" value="/tensegrity/endcap/$(arg color)/marker"/>
+        <param name="max_observations_to_visualize" value="2"/>
+        <param name="rgba" type="yaml" value="$(arg rgba)"/>
+        <param name="world_frame" value="world"/>
+        <param name="camera_frame" value="$(arg camera_frame)"/>
+        <param name="node_id" value="/nodes/Positions/$(arg color)"/>
     </node>
     
     

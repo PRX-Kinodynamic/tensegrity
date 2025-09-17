@@ -9,6 +9,7 @@
 
 // mj-ros
 #include <tensegrity_utils/rosparams_utils.hpp>
+#include <tensegrity_utils/std_utils.hpp>
 // #include <ml4kp_bridge/defs.h>
 // #include <estimation/TrajectoryEstimation.h>
 // #include <estimation/StateEstimation.h>
@@ -23,13 +24,23 @@
 #include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/ISAM2Params.h>
 
-// ML4KP
+#include <interface/defs.hpp>
+
+// Tensegrity FG
+#include <factor_graphs/defs.hpp>
+// #include <factor_graphs/euler_integrator.hpp>
+// #include <factor_graphs/symbols_factory.hpp>
+// #include <factor_graphs/values_utilities.hpp>
+// #include <factor_graphs/dbg_utils.hpp>
 // #include <prx/factor_graphs/utilities/symbols_factory.hpp>
 // #include <prx/factor_graphs/lie_groups/lie_integrator.hpp>
 // #include <prx/factor_graphs/factors/euler_integration_factor.hpp>
 // #include <prx/factor_graphs/factors/se3_observation.hpp>
 // #include <prx/factor_graphs/utilities/values_utilities.hpp>
 // #include <prx/factor_graphs/utilities/dbg_utills.hpp>
+
+#include <estimation/tensegrity_cap_obs_factor.hpp>
+#include <estimation/endcap_observation_factor.hpp>
 
 namespace estimation
 {
@@ -41,18 +52,20 @@ class tensegrity_estimation_t : public Base
   using Values = gtsam::Values;
   using FactorGraph = gtsam::NonlinearFactorGraph;
 
-  // using SF = prx::fg::symbol_factory_t;
+  using SF = factor_graphs::symbol_factory_t;
 
+  using Rotation = gtsam::Rot3;
   using SE3 = gtsam::Pose3;
   using Velocity = Eigen::Vector<double, 6>;
   using Acceleration = Eigen::Vector<double, 6>;
-  using LieIntegratorFactor = prx::fg::lie_integration_factor_t<SE3, Velocity>;
-  using EulerIntegratorFactor = prx::fg::euler_integration_factor_t<Velocity, Acceleration>;
+  using LieIntegratorFactor = factor_graphs::lie_integration_factor_t<SE3, Velocity>;
+  using EulerIntegratorFactor = factor_graphs::euler_integration_factor_t<Velocity, Acceleration>;
+  using ObservationFactor = estimation::endcap_observation_t<SE3>;
 
 public:
   tensegrity_estimation_t()
     : _isam_params(gtsam::ISAM2GaussNewtonParams(), 0.1, 10, true, true, gtsam::ISAM2Params::CHOLESKY, true,
-                   prx::fg::symbol_factory_t::formatter, true)
+                   factor_graphs::symbol_factory_t::formatter, true)
     , _isam(_isam_params)
     , _p_offset(0.0, 0.0, 3.25 / 2.0)
     , _m_offset(0.0, 0.0, -3.25 / 2.0)
@@ -133,8 +146,8 @@ public:
   {
     if (_values.exists(kbar))
     {
-      prx::fg::get_value_safe(_values, se3, kbar);
-      prx::fg::get_value_safe(_values, vel, kvel);
+      factor_graphs::get_value_safe(_values, se3, kbar);
+      factor_graphs::get_value_safe(_values, vel, kvel);
     }
     else
     {
@@ -148,10 +161,11 @@ public:
       {
         r2 = r1 + _p_offset / 2.0;  // Just pick a side and init with that.
       }
-      const Eigen::Quaterniond init_quat{ Eigen::Quaterniond::FromTwoVectors(_m_offset.normalized(), r2 - r1) };
+      const Rotation init_rot{ Eigen::Quaterniond::FromTwoVectors(_m_offset.normalized(), r2 - r1) };
 
       vel = Velocity::Zero();
-      se3 = SE3(init_quat, (r1 + r2) / 2.0);
+      se3 = SE3(init_rot, (r1 + r2) / 2.0);
+      // se3 = SE3(init_quat, (r1 + r2) / 2.0);
 
       _values.insert(kbar, se3);
       _values.insert(kvel, vel);
@@ -165,17 +179,14 @@ public:
 
   void endcap_callback(const interface::TensegrityEndcapsConstPtr msg)
   {
-    using ObservationFactor = estimation::endcap_dynamic_observation_t;
-
     const int id{ msg->barId };
     const gtsam::Key kbar{ keyBar(id, _ti) };
     const gtsam::Key kvel{ keyVel(id, _ti) };
     ObservationFactor::NoiseModel noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e0) };
 
     _endcap_ids.insert(id);
-    DEBUG_VARS(id, _ti);
-    PRINT_KEY(kbar);
-    PRINT_KEY(kvel);
+    // DEBUG_VARS(id, _ti);
+    // PRINT_KEYS(kbar, kvel);
     const double dt{ get_dt(msg->header) };
     for (int i = 0; i < msg->endcaps.size(); ++i)
     {
@@ -210,6 +221,11 @@ public:
       const std::string msg{ "[EXCEPTION] Var:" + SF::formatter(e.nearbyVariable()) + "\n" };
       std::cout << msg << std::string(e.what()) << std::endl;
     }
+    catch (gtsam::ValuesKeyDoesNotExist e)
+    {
+      const std::string msg{ "[EXCEPTION] Var:" + SF::formatter(e.key()) + "\n" };
+      std::cout << msg << std::string(e.what()) << std::endl;
+    }
   }
 
   void create_integration_factor()
@@ -226,13 +242,11 @@ public:
       const gtsam::Key kbar1{ keyBar(id, _ti + 1) };
       const gtsam::Key kvel1{ keyVel(id, _ti + 1) };
 
-      DEBUG_PRINT
       if (_values.exists(kbar0))
       {
-        prx::fg::get_value_safe(_values, _q, kbar0);
+        factor_graphs::get_value_safe(_values, _q, kbar0);
         // prx::fg::get_value_safe(_values, _qdot, kvel1);
 
-        DEBUG_PRINT
         const SE3 q_next{ LieIntegratorFactor::predict(_q, _qdot, dt) };
         const Velocity qdot_next{ EulerIntegratorFactor::predict(_qdot, _qddot, dt) };
 
@@ -253,32 +267,27 @@ public:
 
     try
     {
-      DEBUG_PRINT
       create_integration_factor();
 
       SF::symbols_to_file("/Users/Gary/pracsys/catkin_ws/factor_graph_symbols.txt");
       _next_graph.print("Graph", SF::formatter);
       _next_values.print("Vals", SF::formatter);
 
-      DEBUG_PRINT
       _isam.getLinearizationPoint().print("Isam Vals", SF::formatter);
       _isam.getFactorsUnsafe().print("Isam graph", SF::formatter);
 
-      DEBUG_VARS(_ti);
       // gtsam::NonlinearFactorGraph graph;
       // _isam2_result = _isam.update(graph, _next_values);
       _isam2_result = _isam.update(_next_graph, _next_values);
-      DEBUG_PRINT
       _inserted_factors[_ti].insert(_inserted_factors[_ti].end(),
                                     _isam2_result.newFactorsIndices.begin(),  // no-lint
                                     _isam2_result.newFactorsIndices.end());
-      DEBUG_PRINT
       _isam2_result.newFactorsIndices.clear();
     }
     catch (gtsam::IndeterminantLinearSystemException e)
     {
       const std::string msg{ "[EXCEPTION] Var:" + SF::formatter(e.nearbyVariable()) + "\n" };
-      prx::fg::indeterminant_linear_system_helper(_next_graph, _isam.getLinearizationPoint());
+      factor_graphs::indeterminant_linear_system_helper(_next_graph, _isam.getLinearizationPoint());
       // failure_to_file(msg + e.what());
       std::cout << msg << std::string(e.what()) << std::endl;
       exit(-1);
@@ -292,14 +301,13 @@ public:
     _next_values.clear();
     _next_graph.erase(_next_graph.begin(), _next_graph.end());
 
-    DEBUG_PRINT
     update_estimates();
     _ti++;
   }
 
   void update_estimates()
   {
-    utils::update_header(_tf.header);
+    tensegrity::utils::update_header(_tf.header);
 
     for (auto id : _endcap_ids)
     {
@@ -307,22 +315,18 @@ public:
       const gtsam::Key kvel{ keyVel(id, _ti) };
       const gtsam::Key kvel1{ keyVel(id, _ti + 1) };
 
-      DEBUG_VARS(id, _ti);
-      PRINT_KEY(kbar);
-      PRINT_KEY(kvel);
+      // DEBUG_VARS(id, _ti);
+      // PRINT_KEY(kbar,kvel);
       calculate_estimate_safe(_q, kbar);
-      DEBUG_PRINT
       calculate_estimate_safe(_qdot, kvel);
-      DEBUG_PRINT
 
       _values.insert_or_assign(kbar, _q);
       _values.insert_or_assign(kvel, _qdot);
       _values.insert_or_assign(kvel1, _qdot);
-      DEBUG_PRINT
 
-      ml4kp_bridge::copy(_tf.transform, _q);
+      interface::copy(_tf.transform, _q);
 
-      _tf.child_frame_id = "bar_" + prx::utilities::convert_to<std::string>(id);
+      _tf.child_frame_id = "bar_" + tensegrity::utils::convert_to<std::string>(id);
 
       _tf_broadcaster.sendTransform(_tf);
     }

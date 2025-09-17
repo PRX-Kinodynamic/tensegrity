@@ -1,59 +1,46 @@
 <launch>
-    <arg name="focal_lenght" default="[607.6858520507812,607.9865112304688]"/>
-    <arg name="optical_center" default="[326.55035400390625,250.6623992919922]"/>
-    <arg name="camera_extrinsics" default="[0.999,-0.0,-0.037,-0.597,0.0,-1.0,0.013,0.729,-0.037,-0.013,-0.999,2.458]"/>
-    <arg name="data_dir" default="$(env ML4KP_ROS)/data/tensegrity/"/>
-    <arg name="shutdown_topic" default="/tensegrity/shutdown"/>  <!-- Shutdown NOW -->
+    <!-- <arg name="focal_lenght" default="[601.67626953125,601.7260131835938]"/> -->
+    <!-- <arg name="optical_center" default="[325.53509521484375,248.60618591308594]"/> -->
+    <!-- <arg name="camera_extrinsics" default="[1.0,0.0,-0.01,0.743,0.0,-1.0,-0.007,0.082,-0.01,0.007,-1.0,1.441]"/> -->
+    <!-- <arg name="data_dir" default="$(env TENSEGRITY_ROS)/data/tensegrity/"/> -->
+
+    <!-- Shutdown NOW -->
+    <!-- <arg name="shutdown_topic" default="/tensegrity/shutdown"/>  -->
+
+    <arg name="depth_scale" default="4000"/>
 
     <include file="$(find perception)/launch/tensegrity_endcap.launch">
-        <arg name="focal_lenght" default="$(arg focal_lenght)"/>
-        <arg name="optical_center" default="$(arg optical_center)"/>
-        <arg name="camera_extrinsics" default="$(arg camera_extrinsics)"/>
-        <arg name="observation_freq" default="5"/>
+        <arg name="depth_scale" default="$(arg depth_scale)"/>
+        <arg name="observation_freq" default="30"/>
         <arg name="color" default="red"/>
         <arg name="endcap_id" default="4"/>
-        <arg name="low_H" default="160" />
-        <arg name="low_S" default="120" />
-        <arg name="low_V" default="30" />
-        <arg name="high_H" default="180" />
-        <arg name="high_S" default="255" />
-        <arg name="high_V" default="150" />
+        <arg name="rgba" default="[1,0,0,1]" />
+        <arg name="filters_namespace" value="/camera/filters/" />
+
     </include>
 
     <include file="$(find perception)/launch/tensegrity_endcap.launch">
-        <arg name="focal_lenght" default="$(arg focal_lenght)"/>
-        <arg name="optical_center" default="$(arg optical_center)"/>
-        <arg name="camera_extrinsics" default="$(arg camera_extrinsics)"/>
-        <arg name="observation_freq" default="5"/>
+        <arg name="depth_scale" default="$(arg depth_scale)"/>
+        <arg name="observation_freq" default="30"/>
         <arg name="color" default="green"/>
         <arg name="endcap_id" default="2"/>
-        <arg name="low_H" default="75" />
-        <arg name="low_S" default="100" />
-        <arg name="low_V" default="30" />
-        <arg name="high_H" default="95" />
-        <arg name="high_S" default="255" />
-        <arg name="high_V" default="70" />
+        <arg name="rgba" default="[0,1,0,1]" />
+        <arg name="filters_namespace" value="/camera/filters/" />
     </include>
 
     <include file="$(find perception)/launch/tensegrity_endcap.launch">
-        <arg name="focal_lenght" default="$(arg focal_lenght)"/>
-        <arg name="optical_center" default="$(arg optical_center)"/>
-        <arg name="camera_extrinsics" default="$(arg camera_extrinsics)"/>
-        <arg name="observation_freq" default="5"/>
+        <arg name="depth_scale" default="$(arg depth_scale)"/>
+        <arg name="observation_freq" default="30"/>
         <arg name="color" default="blue"/>
         <arg name="endcap_id" default="1"/>
-        <arg name="low_H" default="100" />
-        <arg name="low_S" default="90" />
-        <arg name="low_V" default="30" />
-        <arg name="high_H" default="120" />
-        <arg name="high_S" default="200" />
-        <arg name="high_V" default="140" />
-    </include>
+        <arg name="rgba" default="[0,0,1,1]" />
+        <arg name="filters_namespace" value="/camera/filters/" />
+    </include> 
 
-    <node pkg="nodelet" type="nodelet" name="estimation_nodelet"  args="manager" output="screen">
+    <!-- <node pkg="nodelet" type="nodelet" name="estimation_nodelet"  args="manager" output="screen">
       <param name="num_worker_threads" value="8" />
-    </node>
-    <node pkg="nodelet" type="nodelet" name="tensegrity_estimation" 
+    </node> -->
+    <!-- <node pkg="nodelet" type="nodelet" name="tensegrity_estimation" 
         args="load estimation/TensegrityEstimation estimation_nodelet" output="screen">
         <param name="red_endcaps_topic" value="/tensegrity/endcap/red/positions"/>
         <param name="green_endcaps_topic" value="/tensegrity/endcap/green/positions"/>
@@ -61,11 +48,20 @@
         <param name="endcap_ids" type="yaml" value="[1, 2, 4]"/>
         <param name="world_frame" value="world"/>
         <param name="estimation_frequency" value="30"/>
-    </node>
- 
-   <!--  <group ns="viz">
+    </node>  -->
+
+    <group ns="viz">
         <node pkg="nodelet" type="nodelet" name="viz_nodelet"  args="manager" output="screen"/>
 
+        <node pkg="nodelet" type="nodelet" name="BarsToMarkers" 
+            args="load interface/TensegrityBarsToMarkers viz_nodelet" output="screen">
+            <param name="tensegrity_bars_topicname" value="/tensegrity/poses"/>
+            <param name="tensegrity_markers_topicname" value="/tensegrity/markers"/>
+            <param name="node_id" value="/nodes/BarsToMarkers"/>
+        </node>
+
+
+        <!-- 
         <node pkg="nodelet" type="nodelet" name="RedPositionsViz" 
             args="load utils/TensegrityEndcapsVizPublisher viz_nodelet" output="screen">
             <param name="topic_name" value="/tensegrity/endcap/red/positions"/>
@@ -105,8 +101,9 @@
             <param name="height" value="0.30"/>
             <param name="color" type="yaml" value="[0.1, 0.9, 0.1, 0.9]"/>
         </node>
+        -->
     </group>
- -->
-    <node pkg="tf2_ros" type="static_transform_publisher" name="tf_world" 
-        args="0 0 0 0 0 0 1 world map" />
+ 
+    <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="tf_world" 
+        args="0 0 0 0 0 0 1 world map" /> -->
 </launch>
