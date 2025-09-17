@@ -1,0 +1,7 @@
+<launch>
+    <node pkg="interface" type="rosbag_record" name="rosbag_record" output="screen">
+        <rosparam command="load" file="$(find interface)/config/rosbag_record.yaml" />
+        <arg name="rosbag_directory" value="$(env TENSEGRITY_ROS)/data/bags"/>
+    </node>
+  
+</launch>

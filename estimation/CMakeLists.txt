@@ -53,7 +53,7 @@ generate_messages(
 # )
 
 catkin_package(
-#  INCLUDE_DIRS include
+ INCLUDE_DIRS include
 #  LIBRARIES mujoco
  CATKIN_DEPENDS roscpp std_msgs message_runtime interface
 #  DEPENDS system_lib

@@ -1,0 +1,13 @@
+topics:
+  - name: "/rgb_images"
+    type: "sensor_msgs::Image"
+  - name: "/depth_images"
+    type: "sensor_msgs::Image"
+  - name: "/mushr/goal_radius"
+    type: "std_msgs::Float64"
+  - name: "/tf"
+    type: "tf2_msgs::TFMessage"
+  - name: "/tf_static"
+    type: "tf2_msgs::TFMessage"
+  - name: "/control_msg"
+    type: "interface::TensegrityStamped"

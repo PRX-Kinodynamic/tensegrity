@@ -17,10 +17,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 
-// #include <ml4kp_bridge/TrajectoryStamped.h>
-// #include <ml4kp_bridge/PlanStamped.h>
-
-// #include <ackermann_msgs/AckermannDriveStamped.h>
+#include <interface/TensegrityStamped.h>
 
 #include <cv_bridge/cv_bridge.h>
 
@@ -50,6 +47,7 @@ interface::queues_t<sensor_msgs::Imu> imu_queue;
 // interface::queues_t<ml4kp_bridge::PlanStamped> plan_queue;
 // interface::queues_t<ml4kp_bridge::TrajectoryStamped> traj_queue;
 interface::queues_t<tf2_msgs::TFMessage> tf_queue;
+interface::queues_t<interface::TensegrityStamped> tensegrity_queue;
 
 template <typename Queue>
 std::size_t process_queue(rosbag::Bag& bag, const Queue& queue)
@@ -86,7 +84,7 @@ void bag_writter()
   while (msgs_left > 0 || !stop)
   {
     msgs_left = process_all_queues(bag, string_queue, twist_stamped_queue, image_queue, imu_queue, float64_queue,
-                                   pose2d_queue, tf_queue);
+                                   pose2d_queue, tf_queue, tensegrity_queue);
     if (stop)
     {
       ROS_INFO_STREAM_ONCE("Remaining messages: " << msgs_left);
@@ -143,6 +141,8 @@ int main(int argc, char** argv)
         pose_stamped_queue.register_topic(topic_name, topic_type, "geometry_msgs::PoseStamped", subscribers, nh);
     registred |= float64_queue.register_topic(topic_name, topic_type, "std_msgs::Float64", subscribers, nh);
     registred |= tf_queue.register_topic(topic_name, topic_type, "tf2_msgs::TFMessage", subscribers, nh);
+    registred |=
+        tensegrity_queue.register_topic(topic_name, topic_type, "interface::TensegrityStamped", subscribers, nh);
 
     if (!registred)
     {

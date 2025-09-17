@@ -14,6 +14,7 @@
 #include <interface/node_status.hpp>
 #include <interface/TensegrityBars.h>
 
+#include <interface/type_conversions.hpp>
 #include <estimation/bar_utilities.hpp>
 
 namespace perception
@@ -41,6 +42,7 @@ private:
     bool& publish_rgb{ _publish_rgb };
     std::string subscriber_topic;
     std::string publisher_topic;
+    std::string tensegrity_pose_topic;
     std::string& encoding{ _encoding };
 
     std::vector<int>& kernel_sizes{ _kernel_sizes };
@@ -54,6 +56,7 @@ private:
     PARAM_SETUP(private_nh, filters_namespace);
     PARAM_SETUP(private_nh, kernel_sizes);
     PARAM_SETUP(private_nh, operations);
+    PARAM_SETUP(private_nh, tensegrity_pose_topic);
     // PARAM_SETUP_WITH_DEFAULT(private_nh, publish_rgb, publish_rgb);
 
     set_hsv_values(filters_namespace + "/black", low_black, high_black);
@@ -96,7 +99,7 @@ private:
     const gtsam::Key key_Xg{ estimation::rod_symbol(estimation::RodColors::GREEN, _idx) };
     const gtsam::Key key_Xb{ estimation::rod_symbol(estimation::RodColors::BLUE, _idx) };
 
-    graph.emplace_shared<gtsam::BetweenFactor>(key_Xr, key_Xg)
+    // graph.emplace_shared<gtsam::BetweenFactor>(key_Xr, key_Xg)
   }
 
   void set_hsv_values(const std::string filters_namespace, cv::Scalar& low_s, cv::Scalar& high_s)
@@ -190,7 +193,7 @@ private:
 
   std::shared_ptr<interface::node_status_t> _status;
 
-  gtsam::Pose3 _btw_red_green _btw_red_blue _btw_green_blue;
+  gtsam::Pose3 _btw_red_green, _btw_red_blue, _btw_green_blue;
 };
 
 }  // namespace perception
