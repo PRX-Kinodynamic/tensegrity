@@ -1,0 +1,66 @@
+<launch>
+	<arg name="img_directory"/>
+
+  <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+  <arg name="filename_prefix" default="test"/>
+  <arg name="visualize" default="true"/>
+  <arg name="collect_all_videos" default="false"/>
+  <arg name="collect_overlay_video" default="false"/>
+  
+  <arg name="use_cable_sensors" default="true"/>
+  
+  <arg name="shape_only_estimation" default="false"/>
+  <arg name="snapshot_estimation" default="false"/>
+  <arg name="ekf_estimation" default="false"/>
+  <arg name="traj_estimation" default="false"/>
+
+  <arg name="autostart_vision_only" default="false"/>
+
+	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
+    <arg name="img_directory" default="$(arg img_directory)"/>
+    <arg name="loop" default="false"/>
+  	<arg name="max_images" default="1"/>
+  	<arg name="sim_clock" default="false"/>
+  	<arg name="output_dir" default="$(arg output_dir)"/>
+  	<arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>
+  	<arg name="output_to_file" default="true"/>
+  </include>
+
+<!-- rosrun estimation open_loop_learned_dynamics _tensegrity_pose_topic:="/tensegrity/pose" _sensors_topicname:=/tensegrity/sensors _cable_unit_conversion:=0.001  _torch_filename:=src/tensegrity/infraestructure/interface/models/old_platform_script_sim_v2.pt -->
+    <node pkg="estimation" type="open_loop_learned_dynamics" name="open_loop_learned_dynamics" required="true"
+        output="screen">
+        <!-- <param name="node_id" value="/nodes/bars_to_file"/> -->
+        <param name="tensegrity_pose_topic" value="/tensegrity/poses"/>
+        <param name="sensors_topicname" value="/tensegrity/sensors"/>
+        <param name="cable_unit_conversion" value="0.001"/>
+        <param name="torch_filename" value="$(env TENSEGRITY_ROS)/src/tensegrity/infraestructure/interface/models/old_platform_script_sim_v2.pt"/>
+        <param name="node_id" value="/nodes/simulator"/>
+        <param name="publisher_node_id" value="/nodes/playback"/>
+    </node>
+
+	<!-- <node pkg="nodelet" type="nodelet" name="data_collection_nodelet"  args="manager" output="screen"/> -->
+    <node pkg="nodelet" type="nodelet" name="viz_ols_nodelet"  args="manager" output="screen"/>
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="ShapeOnlyBarsToMarkersStateEstimation" 
+        args="load interface/TensegrityBarsToMarkers viz_ols_nodelet" output="screen">
+        <param name="tensegrity_bars_topicname" value="/tensegrity/poses"/>
+        <param name="tensegrity_markers_topicname" value="/tensegrity/markers"/>
+        <param name="node_id" value="/node/ShapeOnlyBarsToMarkersStateEstimation"/>
+    </node>
+
+     <node pkg="interface" type="status_wait_and_run.py" name="status_wait_and_run" output="screen">
+    <param name="nodes_to_wait" type="yaml" 
+        value="[
+          ]"
+        />
+    <param name="nodes_to_wait_ready" type="yaml" 
+        value="[
+          /nodes/simulator/status/current
+          ]"
+        />
+    <param name="nodes_to_run" type="yaml" 
+        value="[
+          /nodes/playback/status/change
+          ]"
+        />
+  </node>
+</launch>

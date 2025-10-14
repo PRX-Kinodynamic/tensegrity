@@ -14,6 +14,7 @@ enum RodColors
   BLUE
 };
 using ColorMapping = std::vector<std::pair<RodColors, RodColors>>;
+using ColorMappingNum = std::vector<std::pair<int, int>>;
 
 std::string color_str(const RodColors rod)
 {
@@ -66,6 +67,22 @@ ColorMapping create_cable_map(const std::string filename)
     const RodColors color_b{ estimation::color_str(line[3]) };
 
     map.push_back(std::make_pair(color_a, color_b));
+  }
+  return map;
+}
+
+ColorMappingNum create_cable_map_fix_endcaps(const std::string filename)
+{
+  tensegrity::utils::csv_reader_t reader(filename);
+  ColorMappingNum map;
+  for (int i = 0; i < 9; ++i)
+  {
+    TENSEGRITY_ASSERT(reader.has_next_line(), "Not enough cable map data!");
+    auto line = reader.next_line();
+    const int color_a{ tensegrity::utils::convert_to<int>(line[0]) };
+    const int color_b{ tensegrity::utils::convert_to<int>(line[1]) };
+
+    map.push_back({ color_a, color_b });
   }
   return map;
 }
@@ -289,6 +306,49 @@ gtsam::Values compute_initialization(const std::string initial_estimate_filename
   return result;
 }
 
+void add_triangle_factors(observation_update_t& observation_update, gtsam::NonlinearFactorGraph& graph,
+                          gtsam::Values& values)
+{
+  using Rotation = gtsam::Rot3;
+  using TriangleAlignedFactor = tensegrity_triangles_aligned_factor_t;
+  const int idx{ observation_update.idx };
+  const Eigen::Vector3d& offset{ observation_update.offset };
+  const Rotation& Roffset{ observation_update.Roffset };
+
+  const gtsam::Key key_Xr{ rod_symbol(estimation::RodColors::RED, idx) };
+  const gtsam::Key key_Xg{ rod_symbol(estimation::RodColors::GREEN, idx) };
+  const gtsam::Key key_Xb{ rod_symbol(estimation::RodColors::BLUE, idx) };
+  const gtsam::Key key_Rr{ rotation_symbol(estimation::RodColors::RED, idx, 0) };
+  const gtsam::Key key_Rg{ rotation_symbol(estimation::RodColors::GREEN, idx, 0) };
+  const gtsam::Key key_Rb{ rotation_symbol(estimation::RodColors::BLUE, idx, 0) };
+  const gtsam::Key key_Rrp{ rotation_symbol(estimation::RodColors::RED, idx, 1) };
+  const gtsam::Key key_Rgp{ rotation_symbol(estimation::RodColors::GREEN, idx, 1) };
+  const gtsam::Key key_Rbp{ rotation_symbol(estimation::RodColors::BLUE, idx, 1) };
+
+  gtsam::noiseModel::Base::shared_ptr parallel_triangles_nm{ gtsam::noiseModel::Isotropic::Sigma(3, 1e0) };
+
+  graph.emplace_shared<TriangleAlignedFactor>(key_Xr, key_Rr, key_Xg, key_Rg, key_Xb, key_Rb, offset, Roffset,
+                                              parallel_triangles_nm);
+  graph.emplace_shared<TriangleAlignedFactor>(key_Xg, key_Rg, key_Xb, key_Rb, key_Xr, key_Rr, offset, Roffset,
+                                              parallel_triangles_nm);
+  graph.emplace_shared<TriangleAlignedFactor>(key_Xb, key_Rb, key_Xr, key_Rr, key_Xg, key_Rg, offset, Roffset,
+                                              parallel_triangles_nm);
+  //
+  graph.emplace_shared<TriangleAlignedFactor>(key_Xb, key_Rbp, key_Xg, key_Rgp, key_Xr, key_Rrp, offset, Roffset,
+                                              parallel_triangles_nm);
+  graph.emplace_shared<TriangleAlignedFactor>(key_Xr, key_Rrp, key_Xb, key_Rbp, key_Xg, key_Rgp, offset, Roffset,
+                                              parallel_triangles_nm);
+  graph.emplace_shared<TriangleAlignedFactor>(key_Xg, key_Rgp, key_Xr, key_Rrp, key_Xb, key_Rbp, offset, Roffset,
+                                              parallel_triangles_nm);
+
+  add_to_values(values, key_Rr, gtsam::Rot3());
+  add_to_values(values, key_Rg, gtsam::Rot3());
+  add_to_values(values, key_Rb, gtsam::Rot3());
+  add_to_values(values, key_Rrp, Roffset);
+  add_to_values(values, key_Rgp, Roffset);
+  add_to_values(values, key_Rbp, Roffset);
+}
+
 void add_cable_meassurements(observation_update_t& observation_update, const Eigen::Vector<double, 9>& zi,
                              const int idx, gtsam::NonlinearFactorGraph& graph, gtsam::Values& values,
                              estimation::ColorMapping& cable_map)
@@ -318,7 +378,7 @@ void add_cable_meassurements(observation_update_t& observation_update, const Eig
   // const auto zi = sensors.length;
   // cables_callback.meassurements.clear();
   // const std::vector<double> zi{ cables_callback.get_last_observation() };
-  DEBUG_VARS(zi.transpose());
+  // DEBUG_VARS(zi.transpose());
   int i = 0;
   for (; i < 3; ++i)
   {
@@ -361,29 +421,29 @@ void add_cable_meassurements(observation_update_t& observation_update, const Eig
     graph.emplace_shared<RotationFixIdentity>(key_Ri, key_Rj, Roffset, rot_prior_nm);
   }
 
-  const gtsam::Key key_Xr{ rod_symbol(estimation::RodColors::RED, idx) };
-  const gtsam::Key key_Xg{ rod_symbol(estimation::RodColors::GREEN, idx) };
-  const gtsam::Key key_Xb{ rod_symbol(estimation::RodColors::BLUE, idx) };
-  const gtsam::Key key_Rr{ rotation_symbol(estimation::RodColors::RED, idx, 0) };
-  const gtsam::Key key_Rg{ rotation_symbol(estimation::RodColors::GREEN, idx, 0) };
-  const gtsam::Key key_Rb{ rotation_symbol(estimation::RodColors::BLUE, idx, 0) };
-  const gtsam::Key key_Rrp{ rotation_symbol(estimation::RodColors::RED, idx, 1) };
-  const gtsam::Key key_Rgp{ rotation_symbol(estimation::RodColors::GREEN, idx, 1) };
-  const gtsam::Key key_Rbp{ rotation_symbol(estimation::RodColors::BLUE, idx, 1) };
+  // const gtsam::Key key_Xr{ rod_symbol(estimation::RodColors::RED, idx) };
+  // const gtsam::Key key_Xg{ rod_symbol(estimation::RodColors::GREEN, idx) };
+  // const gtsam::Key key_Xb{ rod_symbol(estimation::RodColors::BLUE, idx) };
+  // const gtsam::Key key_Rr{ rotation_symbol(estimation::RodColors::RED, idx, 0) };
+  // const gtsam::Key key_Rg{ rotation_symbol(estimation::RodColors::GREEN, idx, 0) };
+  // const gtsam::Key key_Rb{ rotation_symbol(estimation::RodColors::BLUE, idx, 0) };
+  // const gtsam::Key key_Rrp{ rotation_symbol(estimation::RodColors::RED, idx, 1) };
+  // const gtsam::Key key_Rgp{ rotation_symbol(estimation::RodColors::GREEN, idx, 1) };
+  // const gtsam::Key key_Rbp{ rotation_symbol(estimation::RodColors::BLUE, idx, 1) };
 
-  graph.emplace_shared<TriangleAlignedFactor>(key_Xr, key_Rr, key_Xg, key_Rg, key_Xb, key_Rb, offset, Roffset,
-                                              parallel_triangles_nm);
-  graph.emplace_shared<TriangleAlignedFactor>(key_Xg, key_Rg, key_Xb, key_Rb, key_Xr, key_Rr, offset, Roffset,
-                                              parallel_triangles_nm);
-  graph.emplace_shared<TriangleAlignedFactor>(key_Xb, key_Rb, key_Xr, key_Rr, key_Xg, key_Rg, offset, Roffset,
-                                              parallel_triangles_nm);
-  //
-  graph.emplace_shared<TriangleAlignedFactor>(key_Xb, key_Rbp, key_Xg, key_Rgp, key_Xr, key_Rrp, offset, Roffset,
-                                              parallel_triangles_nm);
-  graph.emplace_shared<TriangleAlignedFactor>(key_Xr, key_Rrp, key_Xb, key_Rbp, key_Xg, key_Rgp, offset, Roffset,
-                                              parallel_triangles_nm);
-  graph.emplace_shared<TriangleAlignedFactor>(key_Xg, key_Rgp, key_Xr, key_Rrp, key_Xb, key_Rbp, offset, Roffset,
-                                              parallel_triangles_nm);
+  // graph.emplace_shared<TriangleAlignedFactor>(key_Xr, key_Rr, key_Xg, key_Rg, key_Xb, key_Rb, offset, Roffset,
+  //                                             parallel_triangles_nm);
+  // graph.emplace_shared<TriangleAlignedFactor>(key_Xg, key_Rg, key_Xb, key_Rb, key_Xr, key_Rr, offset, Roffset,
+  //                                             parallel_triangles_nm);
+  // graph.emplace_shared<TriangleAlignedFactor>(key_Xb, key_Rb, key_Xr, key_Rr, key_Xg, key_Rg, offset, Roffset,
+  //                                             parallel_triangles_nm);
+  // //
+  // graph.emplace_shared<TriangleAlignedFactor>(key_Xb, key_Rbp, key_Xg, key_Rgp, key_Xr, key_Rrp, offset, Roffset,
+  //                                             parallel_triangles_nm);
+  // graph.emplace_shared<TriangleAlignedFactor>(key_Xr, key_Rrp, key_Xb, key_Rbp, key_Xg, key_Rgp, offset, Roffset,
+  //                                             parallel_triangles_nm);
+  // graph.emplace_shared<TriangleAlignedFactor>(key_Xg, key_Rgp, key_Xr, key_Rrp, key_Xb, key_Rbp, offset, Roffset,
+  //                                             parallel_triangles_nm);
   // graph.emplace_shared<DistanceBarFactor>(key_Xr, key_Xg, 0.03, distance_nm);
   // graph.emplace_shared<DistanceBarFactor>(key_Xg, key_Xb, 0.03, distance_nm);
   // graph.emplace_shared<DistanceBarFactor>(key_Xb, key_Xr, 0.03, distance_nm);

@@ -14,6 +14,7 @@ from interface.msg import TensegrityEndcaps
 from interface.msg import TensegrityBars
 from interface.msg import TensegrityLengthSensor
 from interface.msg import NodeStatus
+from interface.msg import TensegrityStamped, Sensor, Motor
 import tf
 import tf2_ros
 import geometry_msgs
@@ -27,11 +28,13 @@ from interface.node_status import NodeStatusHelper
 class SimDataPublisher(object):
     def __init__(self):
         # self.folder = rospy.get_param("~dir", "")
+        self.endcaps_topic   = rospy.get_param("~endcaps_topic", "")
         self.red_endcaps_topic   = rospy.get_param("~red_endcaps_topic", "")
         self.green_endcaps_topic = rospy.get_param("~green_endcaps_topic", "")
         self.blue_endcaps_topic  = rospy.get_param("~blue_endcaps_topic", "")
 
         self.cable_topic = rospy.get_param("~cable_topic", "")
+        self.sensors_topic_name = rospy.get_param("~sensors_topic_name", "")
 
         self.bar_gt_topic   = rospy.get_param("~bar_gt_topic", "")
         
@@ -53,6 +56,7 @@ class SimDataPublisher(object):
         self.cables_noise_mu = rospy.get_param("~cables_noise_mu", 0.0) 
         self.cables_noise_sigma = rospy.get_param("~cables_noise_sigma", 0.0) 
 
+        self.filename_prefix = rospy.get_param("~filename_prefix", "")
 
         self.node_status = NodeStatusHelper("/node/simulation/");
         self.id_red = 0
@@ -70,8 +74,8 @@ class SimDataPublisher(object):
         self.traj = []
 
         self.read_file()
-        self.publish_tf()
-        self.broadcaster.sendTransform(self.static_transformStamped)
+        # self.publish_tf()
+        # self.broadcaster.sendTransform(self.static_transformStamped)
 
         gt_red_endcaps_topic = self.red_endcaps_topic + "/gt"
         gt_green_endcaps_topic = self.green_endcaps_topic + "/gt"
@@ -83,6 +87,7 @@ class SimDataPublisher(object):
         self.blue_endcaps_gt_publisher = rospy.Publisher(gt_blue_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
             
         # Noise endcap publishers
+        self.endcaps_publisher = rospy.Publisher(self.endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
         self.red_endcaps_publisher = rospy.Publisher(self.red_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
         self.green_endcaps_publisher = rospy.Publisher(self.green_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
         self.blue_endcaps_publisher = rospy.Publisher(self.blue_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
@@ -93,14 +98,27 @@ class SimDataPublisher(object):
         
         # Cable noise publisher
         self.cable_publisher = rospy.Publisher(self.cable_topic, TensegrityLengthSensor, queue_size=1, latch=True)
+        self.sensor_length_pub = rospy.Publisher(self.sensors_topic_name, TensegrityStamped, queue_size=1, latch=True)
 
         self.bar_gt_publisher = rospy.Publisher(self.bar_gt_topic, TensegrityBars, queue_size=1, latch=True)
         self.timer = rospy.Timer(rospy.Duration(1.0 / self.pub_frequency), self.update)
 
         self.tf_broadcaster = tf2_ros.TransformBroadcaster()
         self.tf = geometry_msgs.msg.TransformStamped()
-        self.tf.header.frame_id = self.data_frame
+        self.tf.header.frame_id = "world"
         self.tf.child_frame_id = "robot"
+
+        self.file = None
+        if self.filename_prefix != "":
+            self.filename = self.filename_prefix + ".txt"
+            self.file = open(self.filename, 'w')
+
+
+        # nan endcap for miss ones
+        self.nan_endcap = geometry_msgs.msg.Point() 
+        self.nan_endcap.x = np.nan
+        self.nan_endcap.y = np.nan
+        self.nan_endcap.z = np.nan
 
         self.node_status.status = NodeStatus.READY
 
@@ -162,7 +180,9 @@ class SimDataPublisher(object):
         file = open(self.data_file, 'r')
 
         self.traj = []
+        self.lines = []
         for line in file:
+            self.lines.append(line)
             sp = line.split()
             self.traj.append(self.get_values(sp))
 
@@ -171,8 +191,21 @@ class SimDataPublisher(object):
 
     def get_next_state(self):
 
+        dt = 1.0 / self.data_frequency
+        # stop = self.state_idx + self.step
+        # for i in np.arange(self.state_idx, stop, dt):
+
+        prev =  math.floor(self.state_idx)+1
         self.state_idx += self.step
         idx = math.floor(self.state_idx)
+
+        if self.file is not None:
+            ti = rospy.Time.now().to_sec()
+            # print(f"ti {ti} prev {prev} idx {idx}")
+            for i in range(prev, idx+1):
+                line = str(ti) + " " +  self.lines[i];
+                self.file.write(line)
+                ti += dt
 
         return self.traj[idx]
 
@@ -267,7 +300,26 @@ class SimDataPublisher(object):
         
         msg.length[6] = self.get_distance(Tg, Tb, self.offsetP, self.offsetM);
         msg.length[7] = self.get_distance(Tr, Tg, self.offsetP, self.offsetM);
-        msg.length[8] = self.get_distance(Tb, Tr, self.offsetP, self.offsetM);
+        msg.length[8] = self.get_distance(Tr, Tb, self.offsetM, self.offsetP);
+
+        # print(f"dists: {msg.length}")
+
+        return msg;
+
+    def merge_endcap_msgs(self, red_msg, green_msg, blue_msg):
+        msg = TensegrityEndcaps()
+        msg.barId = red_msg.barId 
+        msg.header.frame_id = red_msg.header.frame_id 
+        msg.header.stamp = red_msg.header.stamp 
+        
+        msg.endcaps.append(red_msg.endcaps[0])
+        msg.endcaps.append(red_msg.endcaps[1])
+        
+        msg.endcaps.append(green_msg.endcaps[0])
+        msg.endcaps.append(green_msg.endcaps[1])
+
+        msg.endcaps.append(blue_msg.endcaps[0])
+        msg.endcaps.append(blue_msg.endcaps[1])
 
         return msg;
 
@@ -297,8 +349,13 @@ class SimDataPublisher(object):
         trial = np.random.binomial(1, 1.0 - self.endcap_miss_probability, 2)
         if trial[0] == 1:
             msg_noise.endcaps.append(eA)
+        else:
+            msg_noise.endcaps.append(self.nan_endcap)
+
         if trial[1] == 1:
             msg_noise.endcaps.append(eB)
+        else:
+            msg_noise.endcaps.append(self.nan_endcap)
 
         msg_noise.barId = msg.barId 
         msg_noise.header.frame_id = msg.header.frame_id 
@@ -325,6 +382,20 @@ class SimDataPublisher(object):
         msg_noise.length[8] = msg.length[8] + noise[8]
 
         return msg_noise
+
+    def cables_to_sensors(self, cable_msg):
+        msg = TensegrityStamped()
+        msg.header.frame_id = cable_msg.header.frame_id
+        msg.header.stamp = cable_msg.header.stamp
+        i = 0;
+        for li in cable_msg.length:
+            msg.sensors.append(Sensor())
+            msg.sensors[-1].length = li
+            msg.sensors[-1].id = i;
+            i += 1;
+        # print(f"sensor: {msg.sensors}")
+        return msg;
+
 
     def publish_bars_tf(self, state):
         self.tf.header.stamp = rospy.Time.now();
@@ -379,7 +450,11 @@ class SimDataPublisher(object):
                 self.state_idx += self.step
                 self.state_idx = self.state_idx - len(self.traj)
             else:
+                self.node_status.status = NodeStatus.FINISH
+                rospy.Rate(1.0).sleep();
+                rospy.Rate(1.0).sleep();
                 rospy.loginfo("Finished!")
+                self.file.close();
                 exit(-1)
         # self.broadcaster.sendTransform(self.static_transformStamped)
         
@@ -397,10 +472,12 @@ class SimDataPublisher(object):
         msg_noise_green = self.add_noise_to_endcap(msg_green)
         msg_noise_blue = self.add_noise_to_endcap(msg_blue)
 
+        msg_noise_all = self.merge_endcap_msgs(msg_noise_red, msg_noise_green, msg_noise_blue)
+
         msg_cable_sensor = self.compute_distances(state)
 
         msg_noise_cable_sensor = self.add_noise_to_cables(msg_cable_sensor)
-
+        msg_noise_sensors = self.cables_to_sensors(msg_noise_cable_sensor)
 
         self.bar_gt_publisher.publish(bar_msg)
         
@@ -408,13 +485,14 @@ class SimDataPublisher(object):
         self.green_endcaps_gt_publisher.publish(msg_green)
         self.blue_endcaps_gt_publisher.publish(msg_blue)
 
+        self.endcaps_publisher.publish(msg_noise_all)
         self.red_endcaps_publisher.publish(msg_noise_red)
         self.green_endcaps_publisher.publish(msg_noise_green)
         self.blue_endcaps_publisher.publish(msg_noise_blue)
         
         self.cable_publisher.publish(msg_noise_cable_sensor)
         self.cable_gt_publisher.publish(msg_cable_sensor)
-     
+        self.sensor_length_pub.publish(msg_noise_sensors);
 
 if __name__ == '__main__':
     rospy.init_node("SimDataPublisher")

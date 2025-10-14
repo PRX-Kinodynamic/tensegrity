@@ -22,9 +22,21 @@
         <param name="publisher_topic" value="/images/rgb/filtered"/>
         <param name="filters_namespace" value="$(arg filters_namespace)"/>
         <param name="node_id" value="/nodes/TensegrityFilter"/>
-        <param name="encoding" value="bgr8"/>
-        <param name="kernel_sizes" type="yaml" value="[5,5]"/>
-        <param name="operations" value="DE"/>
+        <param name="kernel_sizes" type="yaml" value="[2,3]"/>
+        <param name="operations" value="ED"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose"/>
+        <param name="depth_topic" value="/images/depth"/>
+        <param name="use_depth" value="True"/>
+        <param name="depth_scale" value="4000"/>
+        <param name="camera_frame" value="real_sense"/>
+        <param name="world_frame" value="world"/>
+        <param name="camera_info_topic" value="/real_sense/info"/>
+        <param name="red_markers_topic" value="/tensegrity/endcap/red/marker"/>
+        <param name="green_markers_topic" value="/tensegrity/endcap/green/marker"/>
+        <param name="blue_markers_topic" value="/tensegrity/endcap/blue/marker"/>
+        <param name="red_endcap_topic" value="/tensegrity/endcap/red/positions"/>
+        <param name="green_endcap_topic" value="/tensegrity/endcap/green/positions"/>
+        <param name="blue_endcap_topic" value="/tensegrity/endcap/blue/positions"/>
     </node>
     
     

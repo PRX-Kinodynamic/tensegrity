@@ -1,0 +1,93 @@
+<launch>
+	<arg name="img_directory"/>
+
+  <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+  <arg name="filename_prefix" default="test"/>
+  <arg name="visualize" default="true"/>
+  <arg name="collect_all_videos" default="false"/>
+  <arg name="collect_overlay_video" default="false"/>
+  <arg name="fix_dt" default="0.1"/>
+  
+  <arg name="use_cable_sensors" default="true"/>
+  
+  <arg name="autostart" default="false"/>
+
+	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
+    <arg name="img_directory" default="$(arg img_directory)"/>
+    <arg name="loop" default="false"/>
+  	<arg name="max_images" default="1"/>
+  	<arg name="sim_clock" default="true"/>
+  	<arg name="output_dir" default="$(arg output_dir)"/>
+  	<arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>
+  	<arg name="output_to_file" default="true"/>
+    <arg name="fix_dt" default="$(arg fix_dt)"/>
+  </include>
+
+	<!-- Get the endcaps by color from images -->
+	<include file="$(find perception)/launch/tensegrity_filter.launch">
+	</include>
+
+
+	<!-- Snapshot estimation (no history) -->
+    <node pkg="estimation" type="snapshot_estimation_2" name="snapshot_estimation_2" required="true" output="screen">
+		<param name="red_endcaps_topic" value="/tensegrity/endcap/red/positions"/>
+        <param name="green_endcaps_topic" value="/tensegrity/endcap/green/positions"/>
+		<param name="blue_endcaps_topic" value="/tensegrity/endcap/blue/positions"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/poses"/>
+	</node>
+    
+
+
+	<node pkg="nodelet" type="nodelet" name="aux_nodelet"  args="manager" output="screen"/>
+
+    <node pkg="nodelet" type="nodelet" name="TensegrityBarsToFile" required="true"
+        args="load interface/TensegrityBarsToFile aux_nodelet" output="screen">
+        <param name="node_id" value="/nodes/bars_to_file"/>
+        <param name="poses_filename" value="$(arg output_dir)/$(arg filename_prefix)_estimated_poses.txt"/>
+        <param name="endcap_filename" value="$(arg output_dir)/$(arg filename_prefix)_estimated_endcap.txt"/>
+        <param name="tensegrity_bars_topicname" value="/tensegrity/poses"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="BarsToMarkers" 
+            args="load interface/TensegrityBarsToMarkers aux_nodelet" output="screen">
+            <param name="tensegrity_bars_topicname" value="/tensegrity/poses"/>
+            <param name="tensegrity_markers_topicname" value="/tensegrity/markers"/>
+            <param name="node_id" value="/nodes/BarsToMarkers"/>
+        </node>
+
+  <node if="$(arg collect_overlay_video)" pkg="perception" type="topic_to_video" name="topic_to_video">
+    <param name="image_topic" value="/tensegrity/estimation/overlay"/>
+    <param name="video_directory" value="$(arg output_dir)"/>
+    <param name="width" value="640"/>
+    <param name="height" value="480"/>
+    <param name="video_id" value="$(arg filename_prefix)_overlay"/>
+  </node>
+
+  <!-- Collect status of all viz-related nodes into a single one -->
+<!--   <node pkg="interface" type="status_funnel.py" name="viz_sim_data_status_funnel">
+    <param name="output_topic" value="/nodes/camera"/>
+    <param name="node_status_topics" type="yaml" 
+        value="[
+          /nodes/Positions/blue/status/current,
+          /nodes/Positions/green/status/current,
+          /nodes/Positions/red/status/current,
+          /nodes/BlackColorFilterred/status/current,
+          /nodes/ColorFilterred/status/current,
+          /nodes/BlackColorFiltergreen/status/current,
+          /nodes/ColorFiltergreen/status/current,
+          /nodes/BlackColorFilterblue/status/current,
+          /nodes/ColorFilterblue/status/current,
+          ]"
+        />
+  </node> -->
+
+  <node pkg="interface" type="tensegrity_topics_to_files.py" name="tensegrity_topics_to_files">
+    <param name="file_prefix" value="$(arg output_dir)/$(arg filename_prefix)"/>
+    <param name="red_positions_topic" value="/tensegrity/endcap/red/positions"/>
+    <param name="green_positions_topic" value="/tensegrity/endcap/blue/positions"/>
+    <param name="blue_positions_topic" value="/tensegrity/endcap/green/positions"/>
+  </node>
+
+
+
+</launch>

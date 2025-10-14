@@ -11,6 +11,7 @@ import numpy as np
 class NodeStatusHelper:
     def __init__(self, node_id):
         self.msg = NodeStatus()
+        self.node_id = node_id
         self.msg.status = NodeStatus.PREPARING;
         change_topic =  node_id + "/status/change";
         current_topic =  node_id + "/status/current";
@@ -30,33 +31,35 @@ class NodeStatusHelper:
         self.status_change(new_status)
 
     def callback(self, msg):
-        print(f"NodeStatus {msg}")
+        # print(f"{self.node_id}: Status {msg}")
         self.status_change(msg.status)
 
     def update(self, event):
-        if self.msg.status == NodeStatus.FINISH:
-            rospy.signal_shutdown("Status FINISH received");
+        # if self.msg.status == NodeStatus.FINISH:
+            # rospy.signal_shutdown("Status FINISH received");
         self.status_publisher.publish(self.msg);
 
     def status_change(self, new_status):
         current = self.msg.status 
-        next_status = current
+        # next_status = current
 
-        if current == NodeStatus.PREPARING:
-            next_status = self.status_preparing(new_status);
-        elif current == NodeStatus.READY:
-            next_status = self.status_ready(new_status);
-        elif current == NodeStatus.RUNNING:
-            next_status = self.status_running(new_status);
-        elif current == NodeStatus.WAITING:
-            next_status = self.status_waiting(new_status);
-        elif current == NodeStatus.STOPPED:
-            next_status = self.status_stopped(new_status);
-        else:
-            raise Exception("[NodeStatusHelper] Status unknown");
+        # if current == NodeStatus.PREPARING:
+        #     next_status = self.status_preparing(new_status);
+        # elif current == NodeStatus.READY:
+        #     next_status = self.status_ready(new_status);
+        # elif current == NodeStatus.RUNNING:
+        #     next_status = self.status_running(new_status);
+        # elif current == NodeStatus.WAITING:
+        #     next_status = self.status_waiting(new_status);
+        # elif current == NodeStatus.STOPPED:
+        #     next_status = self.status_stopped(new_status);
+        # else:
+        #     raise Exception("[NodeStatusHelper] Status unknown");
     
-        self.msg.status = next_status;
-        self.status_publisher.publish(self.msg);
+        self.msg.status = new_status;
+        # print(f"status py: {self.msg.status} {new_status}")
+        if not rospy.is_shutdown():
+            self.status_publisher.publish(self.msg);
 
     def status_preparing(self, new_status):
         return new_status;  # All valid on preparing

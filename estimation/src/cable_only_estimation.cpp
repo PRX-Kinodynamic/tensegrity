@@ -170,10 +170,6 @@ int main(int argc, char* argv[])
 
       estimation::publish_tensegrity_msg(red_bar, green_bar, blue_bar, tensegrity_bars_publisher, "world", idx);
       // break;
-
-      // idx++;
-      // green_idx++;
-      // blue_idx++;
     }
 
     ros::spinOnce();

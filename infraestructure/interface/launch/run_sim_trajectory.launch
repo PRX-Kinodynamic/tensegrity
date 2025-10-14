@@ -1,0 +1,39 @@
+<launch>
+    <arg name="data_file"/>
+    <arg name="pub_frequency" default="30"/>
+    <arg name="data_frequency" default="200"/>
+    <arg name="loop" default="false"/>
+    <arg name="red_endcaps_topic" default="/tensegrity/endcap/red/positions"/>
+    <arg name="green_endcaps_topic" default="/tensegrity/endcap/green/positions"/>
+    <arg name="blue_endcaps_topic" default="/tensegrity/endcap/blue/positions"/>
+    <arg name="tensegrity_gt_topic" default="/tensegrity/gt"/>
+    <arg name="cable_topic" default="/tensegrity/cables"/>
+    <arg name="endcap_noise_sigma" default="0.0"/>
+    <arg name="endcap_miss_probability" default="0.0"/>
+    <arg name="cables_noise_mu" default="0.0"/>
+    <arg name="cables_noise_sigma" default="0.0"/>
+    <arg name="data_scale_factor" default="0.10"/>
+    <arg name="sim_clock" default="false"/>
+    <arg name="endcap_swap_probability" default="0.0"/>
+    <arg name="visualize" default="true"/>
+
+    <include file="$(find interface)/launch/simulated_data.launch">
+        <arg name="data_file" default="$(arg data_file)"/>
+        <arg name="pub_frequency" default="$(arg pub_frequency)"/>
+        <arg name="data_frequency" default="200"/>
+        <arg name="loop" default="false"/>
+        <arg name="red_endcaps_topic" default="/tensegrity/endcap/red/positions"/>
+        <arg name="green_endcaps_topic" default="/tensegrity/endcap/green/positions"/>
+        <arg name="blue_endcaps_topic" default="/tensegrity/endcap/blue/positions"/>
+        <arg name="tensegrity_gt_topic" default="/tensegrity/gt"/>
+        <arg name="cable_topic" default="/tensegrity/cables"/>
+        <arg name="endcap_noise_sigma" default="0.0"/>
+        <arg name="endcap_miss_probability" default="0.0"/>
+        <arg name="cables_noise_mu" default="0.0"/>
+        <arg name="cables_noise_sigma" default="0.0"/>
+        <arg name="data_scale_factor" default="0.10"/>
+        <arg name="sim_clock" default="false"/>
+        <arg name="endcap_swap_probability" default="0.0"/>
+        <arg name="visualize" default="true"/>
+    </include>
+</launch>

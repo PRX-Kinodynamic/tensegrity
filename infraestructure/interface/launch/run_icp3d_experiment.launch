@@ -1,0 +1,61 @@
+<launch>
+	<arg name="img_directory"/>
+
+  <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+  <arg name="filename_prefix" default="test"/>
+  <arg name="visualize" default="true"/>
+  <arg name="collect_all_videos" default="false"/>
+  <arg name="collect_overlay_video" default="false"/>
+  
+  <arg name="fix_dt" default="0.1"/>
+  <arg name="use_between_factor" default="false"/>
+  
+  <arg name="max_pts" default="50"/>
+  <arg name="total_sample_bars" default="10"/>
+  <arg name="total_image_points" default="500"/>
+  <!-- <arg name="visualize" default="false"/> -->
+
+	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
+    <arg name="img_directory" default="$(arg img_directory)"/>
+    <arg name="loop" default="false"/>
+  	<arg name="max_images" default="1"/>
+    <arg name="sim_clock" default="false"/>
+  	<!-- <arg name="sim_clock" default="true"/> -->
+    <arg name="output_dir" default="$(arg output_dir)"/>
+  	<arg name="fix_dt" default="$(arg fix_dt)"/>
+  	<arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>
+    <arg name="output_to_file" default="true"/>
+  </include>
+
+  <include file="$(find estimation)/launch/snapshot_estimation.launch">
+  </include>
+
+  <!-- <node pkg="perception" type="bars_depth_icp" name="bars_depth_icp" output="screen">
+        <param name="image_topic" value="/images/rgb"/>
+        <param name="depth_topic" value="/images/depth"/>
+        <param name="max_pts" value="5000"/>
+        <param name="depth_scale" value="4000"/>
+        <param name="use_between_factor" value="$(arg use_between_factor)"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/previous"/>
+    </node> -->
+
+  <node pkg="perception" type="line_based_estimation" name="line_based_estimation" output="screen">
+      <param name="image_topic" value="/images/rgb"/>
+      <param name="depth_topic" value="/images/depth"/>
+      <param name="max_pts" value="$(arg max_pts)"/>
+      <param name="depth_scale" value="4000"/>
+      <param name="use_between_factor" value="$(arg use_between_factor)"/>
+      <param name="tensegrity_pose_topic" value="/tensegrity/pose/previous"/>
+      <param name="total_sample_bars" value="$(arg total_sample_bars)"/>
+      <param name="total_image_points" value="$(arg total_image_points)"/>
+      <param name="visualize" value="$(arg visualize)"/>
+  </node>
+
+  <!-- <node pkg="nodelet" type="nodelet" name="TensegrityBarsArrayToMarkers" args="standalone interface/TensegrityBarsArrayToMarkers">
+    <param name="node_id" value="BarsArraytoMarker"/>
+    <param name="use_mesh" value="false"/>
+    <param name="tensegrity_trajectory_topicname" value="/bars/estimated"/>
+
+  </node> -->
+
+</launch>

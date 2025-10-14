@@ -59,7 +59,8 @@ generate_messages(
 #   cfg/MushrEstimator.cfg
 # )
 generate_dynamic_reconfigure_options(
-  cfg/*.cfg
+  cfg/ColorFilter.cfg
+  cfg/TensegrityInitialization.cfg
 )
 
 

@@ -64,7 +64,7 @@ class CameraInfoNode(object):
         self.camera_extrinsics = rospy.get_param("~camera_extrinsics")
 
 
-        self.camera_name = "/" + rospy.get_param('~camera_name') 
+        self.camera_name = rospy.get_param('~camera_name') 
         self.camera_name_topic = "/" + self.camera_name  + "/info"
         self.publisher_camera_info = rospy.Publisher(self.camera_name_topic, CameraInfo, queue_size=1, latch=True)
 

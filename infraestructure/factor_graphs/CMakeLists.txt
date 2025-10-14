@@ -22,7 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(GTSAM REQUIRED) # Uses installed package
 if(GTSAM_USE_TBB)
     message(STATUS "GTSAM is using TBB")
-  # find_package(TBB 4.4 COMPONENTS tbb tbbmalloc)
+  find_package(TBB 4.4 COMPONENTS tbb tbbmalloc)
 endif(GTSAM_USE_TBB)
 
 

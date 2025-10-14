@@ -1,0 +1,106 @@
+<launch>
+	<arg name="img_directory"/>
+
+  <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+  <arg name="filename_prefix" default="test"/>
+  <arg name="visualize" default="true"/>
+  <arg name="collect_all_videos" default="false"/>
+  <arg name="collect_overlay_video" default="false"/>
+  
+  <!-- <arg name="N" default="10"/> -->
+  <arg name="Nbars_ratio" default="0.70"/>
+  <arg name="use_cable_sensors" default="true"/>
+  <arg name="publish_npy_poses" default="false"/>
+  <arg name="autostart" default="false"/>
+
+	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
+    <arg name="img_directory" default="$(arg img_directory)"/>
+    <arg name="loop" default="false"/>
+  	<arg name="max_images" default="1"/>
+  	<arg name="sim_clock" default="false"/>
+  	<arg name="output_dir" default="$(arg output_dir)"/>
+  	<arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>
+  	<arg name="output_to_file" default="true"/>
+    <arg name="publish_npy_poses" default="$(arg publish_npy_poses)"/>
+  </include>
+
+  <include file="$(find estimation)/launch/snapshot_estimation.launch">
+    <arg name="filename" default="$(arg output_dir)/$(arg filename_prefix)_gt_poses.txt"/>
+    <arg name="autostart" default="$(arg autostart)"/>
+  </include>
+
+	<!-- Snapshot estimation (no history) -->
+	<node pkg="estimation" type="chev_endcaps" name="chev_endcaps" required="true" output="screen">
+        <param name="node_id" value="/nodes/bars_to_file"/>
+        <param name="tensegrity_bars_topicname" value="/tensegrity/endcaps/proposed"/>
+        <param name="publisher_node_id" value="/nodes/playback"/>
+        <param name="cheb_json_filename" value="$(arg output_dir)/$(arg filename_prefix)_cheb_endcaps_bars.json"/>
+        <param name="cable_unit_conversion" value="0.001"/>
+        <param name="cable_map_filename" value="$(arg img_directory)/cable_map.txt"/>
+        <param name="sensors_topicname" value="/tensegrity/sensors"/>
+        <param name="other_frame" value="real_sense"/>
+        <param name="world_frame" value="world"/>
+        <!-- <param name="N" value="$(arg N)"/> -->
+        <param name="Nbars_ratio" value="$(arg Nbars_ratio)"/>
+    </node>
+
+  <node pkg="nodelet" type="nodelet" name="viz_cheb_nodelet"  args="manager" output="screen"/>
+
+  <node pkg="nodelet" type="nodelet" name="cheb_proposed_bars_to_marker" args="load interface/TensegrityBarsToMarkers viz_cheb_nodelet" output="screen">
+            <param name="node_id" value="cheb_proposed_bars_to_marker"/>
+            <param name="tensegrity_bars_topicname" value="/tensegrity/cheb/output" />
+            <param name="tensegrity_markers_topicname" value="/tensegrity/cheb/output/markers" />
+            <param name="alpha" value="1.0" />
+            <!-- <param name="max_endcaps_to_visualize" value="1" /> -->
+        </node>
+
+<!-- 
+	<node pkg="nodelet" type="nodelet" name="data_collection_nodelet"  args="manager" output="screen"/>
+
+    <node pkg="nodelet" type="nodelet" name="TensegrityBarsToFile" required="true"
+        args="load interface/TensegrityBarsToFile data_collection_nodelet" output="screen">
+        <param name="node_id" value="/nodes/bars_to_file"/>
+        <param name="poses_filename" value="$(arg output_dir)/$(arg filename_prefix)_estimated_poses.txt"/>
+        <param name="endcap_filename" value="$(arg output_dir)/$(arg filename_prefix)_estimated_endcap.txt"/>
+        <param name="tensegrity_bars_topicname" value="/tensegrity/poses"/>
+    </node>
+ -->
+
+  <!-- Collect status of all viz-related nodes into a single one -->
+<!--   <node pkg="interface" type="status_funnel.py" name="viz_sim_data_status_funnel">
+    <param name="output_topic" value="/nodes/camera"/>
+    <param name="node_status_topics" type="yaml" 
+        value="[
+          /nodes/Positions/blue/status/current,
+          /nodes/Positions/green/status/current,
+          /nodes/Positions/red/status/current,
+          /nodes/BlackColorFilterred/status/current,
+          /nodes/ColorFilterred/status/current,
+          /nodes/BlackColorFiltergreen/status/current,
+          /nodes/ColorFiltergreen/status/current,
+          /nodes/BlackColorFilterblue/status/current,
+          /nodes/ColorFilterblue/status/current,
+          ]"
+        />
+  </node> -->
+
+  <node if="$(arg autostart)" pkg="interface" type="status_wait_and_run.py" name="status_wait_and_run" output="screen">
+    <param name="nodes_to_wait" type="yaml" 
+        value="[
+          /nodes/state_estimation/status/current
+          ]"
+        />
+    <param name="nodes_to_wait_ready" type="yaml" 
+        value="[
+          /nodes/playback/status/current
+          ]"
+        />
+    <param name="nodes_to_run" type="yaml" 
+        value="[
+          /nodes/playback/status/change
+          ]"
+        />
+  </node>
+
+
+</launch>

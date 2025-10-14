@@ -17,6 +17,8 @@ struct rod_callback_t
     observations.push_back(*msg);
     remove_invalid_observations(observations.back());
     frame = msg->header.frame_id;
+    seq = msg->header.seq;
+    ti = msg->header.stamp;
   }
 
   // Observations may contain NaNs => remove those
@@ -72,6 +74,8 @@ struct rod_callback_t
   }
 
   std::string frame;
+  int seq;
+  ros::Time ti;
 
   std::deque<interface::TensegrityEndcaps> observations;
   ros::Subscriber _red_subscriber;

@@ -1,5 +1,6 @@
 <launch>
 
+    <arg name="autostart" default="false"/>
     <arg name="visualize" default="true"/>
     <arg name="cable_unit_conversion"/>
     <arg name="cable_map_filename"/>

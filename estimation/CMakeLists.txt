@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   interface
   tensegrity_utils
   factor_graphs
+  nav_msgs
 )
 
 set(MSG_FILES "")

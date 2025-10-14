@@ -37,6 +37,54 @@ inline StringType convert_to(const MsgType& from)
   return strstr.str();
 }
 
+template <typename MsgType, typename RotType,
+          std::enable_if_t<std::is_same<RotType, gtsam::Quaternion>::value &&
+                               std::is_same<MsgType, geometry_msgs::Quaternion>::value,
+                           bool> = true>
+inline MsgType convert_to(const RotType& from)
+{
+  MsgType msg;
+  msg.w = from.w();
+  msg.x = from.x();
+  msg.y = from.y();
+  msg.z = from.z();
+  return msg;
+}
+
+template <typename MsgType, typename RotType,
+          std::enable_if_t<std::is_same<RotType, gtsam::Rot3>::value &&
+                               std::is_same<MsgType, geometry_msgs::Quaternion>::value,
+                           bool> = true>
+inline MsgType convert_to(const RotType& from)
+{
+  return convert_to<MsgType>(from.toQuaternion());
+}
+
+template <
+    typename MsgType, typename InType,
+    std::enable_if_t<std::is_same<InType, Eigen::Vector3d>::value && std::is_same<MsgType, geometry_msgs::Point>::value,
+                     bool> = true>
+inline MsgType convert_to(const InType& from)
+{
+  geometry_msgs::Point pt;
+  pt.x = from[0];
+  pt.y = from[1];
+  pt.z = from[2];
+  return pt;
+}
+
+template <
+    typename MsgType, typename InType,
+    std::enable_if_t<std::is_same<InType, gtsam::Pose3>::value && std::is_same<MsgType, geometry_msgs::Pose>::value,
+                     bool> = true>
+inline MsgType convert_to(const InType& from)
+{
+  geometry_msgs::Pose pose;
+  pose.position = convert_to<geometry_msgs::Point>(from.translation());
+  pose.orientation = convert_to<geometry_msgs::Quaternion>(from.rotation());
+  return pose;
+}
+
 template <
     typename StringType, typename MsgType,
     std::enable_if_t<std::is_same<StringType, std::string>::value && std::is_same<MsgType, geometry_msgs::Pose>::value,

@@ -14,32 +14,46 @@ class node_status_t
   using StatusType = uint8_t;
   // using interface::NodeStatus
 
+  void init(ros::NodeHandle& nh, const std::string node_id)
+  {
+    _msg.status = NodeStatus::PREPARING;
+    const std::string change_topic{ node_id + "/status/change" };
+    const std::string current_topic{ node_id + "/status/current" };
+    if (not _observer_only)
+    {
+      _status_publisher = nh.advertise<interface::NodeStatus>(current_topic, 1, true);
+      _timer = nh.createTimer(ros::Rate(1.0), &This::update, this);
+      _status_publisher.publish(_msg);
+      _status_subscriber = nh.subscribe(change_topic, 1, &This::callback, this);
+    }
+    else
+    {
+      _status_subscriber = nh.subscribe(current_topic, 1, &This::callback, this);
+    }
+    // DEBUG_VARS(change_topic)
+  }
+
 public:
   // TODO: Should move it to private
-  node_status_t(ros::NodeHandle& nh)
+  node_status_t(ros::NodeHandle& nh, bool observer_only = false) : _observer_only(observer_only)
   {
     std::string node_id;
     PARAM_SETUP(nh, node_id);
-    _msg.status = NodeStatus::PREPARING;
-    const std::string change_topic{ node_id + "/status/change" };
-    const std::string current_topic{ node_id + "/status/current" };
-    _status_publisher = nh.advertise<interface::NodeStatus>(current_topic, 1, true);
-    _status_subscriber = nh.subscribe(change_topic, 1, &This::callback, this);
-
-    _timer = nh.createTimer(ros::Rate(1.0), &This::update, this);
-    _status_publisher.publish(_msg);
+    init(nh, node_id);
   }
 
-  node_status_t(ros::NodeHandle& nh, const std::string node_id)
+  node_status_t(ros::NodeHandle& nh, const std::string node_id, bool observer_only = false)
+    : _observer_only(observer_only)
   {
-    _msg.status = NodeStatus::PREPARING;
-    const std::string change_topic{ node_id + "/status/change" };
-    const std::string current_topic{ node_id + "/status/current" };
-    _status_publisher = nh.advertise<interface::NodeStatus>(current_topic, 1, true);
-    _status_subscriber = nh.subscribe(change_topic, 1, &This::callback, this);
+    init(nh, node_id);
+    // _msg.status = NodeStatus::PREPARING;
+    // const std::string change_topic{ node_id + "/status/change" };
+    // const std::string current_topic{ node_id + "/status/current" };
+    // _status_publisher = nh.advertise<interface::NodeStatus>(current_topic, 1, true);
+    // _status_subscriber = nh.subscribe(change_topic, 1, &This::callback, this);
 
-    _timer = nh.createTimer(ros::Rate(1.0), &This::update, this);
-    _status_publisher.publish(_msg);
+    // _timer = nh.createTimer(ros::Rate(1.0), &This::update, this);
+    // _status_publisher.publish(_msg);
   }
   // enum status_t
   // {
@@ -56,17 +70,23 @@ public:
     // TODO: Publish stopped, but constructor needs to be private
   }
 
-  static std::shared_ptr<node_status_t> create(ros::NodeHandle& nh, const std::string node_id)
+  template <typename... Ts>
+  static std::shared_ptr<node_status_t> create(ros::NodeHandle& nh, Ts... args)
   {
-    return std::make_shared<node_status_t>(nh, node_id);
+    return std::make_shared<node_status_t>(nh, args...);
   }
+
+  // static std::shared_ptr<node_status_t> create(ros::NodeHandle& nh, const std::string node_id)
+  // {
+  //   return std::make_shared<node_status_t>(nh, node_id);
+  // }
 
   void update(const ros::TimerEvent& t)
   {
-    if (_msg.status == NodeStatus::FINISH)
-    {
-      ros::shutdown();
-    }
+    // if (_msg.status == NodeStatus::FINISH)
+    // {
+    //   ros::shutdown();
+    // }
     _status_publisher.publish(_msg);
   }
 
@@ -103,6 +123,9 @@ public:
       case NodeStatus::STOPPED:
         str = "STOPPED";
         break;
+      case NodeStatus::FINISH:
+        str = "FINISH";
+        break;
       default:
         TENSEGRITY_THROW("[node_status_t] Status unknown");
     }
@@ -130,30 +153,32 @@ private:
   void status_change(const StatusType new_status)
   {
     const StatusType current{ _msg.status };
-    StatusType next;
-    switch (current)
-    {
-      case NodeStatus::PREPARING:
-        next = status_preparing(new_status);
-        break;
-      case NodeStatus::READY:
-        next = status_ready(new_status);
-        break;
-      case NodeStatus::RUNNING:
-        next = status_running(new_status);
-        break;
-      case NodeStatus::WAITING:
-        next = status_waiting(new_status);
-        break;
-      case NodeStatus::STOPPED:
-        next = status_stopped(new_status);
-        break;
-      default:
-        TENSEGRITY_THROW("[node_status_t] Status unknown");
-    }
+    // StatusType next;
+    // switch (current)
+    // {
+    //   case NodeStatus::PREPARING:
+    //     next = status_preparing(new_status);
+    //     break;
+    //   case NodeStatus::READY:
+    //     next = status_ready(new_status);
+    //     break;
+    //   case NodeStatus::RUNNING:
+    //     next = status_running(new_status);
+    //     break;
+    //   case NodeStatus::WAITING:
+    //     next = status_waiting(new_status);
+    //     break;
+    //   case NodeStatus::STOPPED:
+    //     next = status_stopped(new_status);
+    //     break;
+    //   default:
+    //     TENSEGRITY_THROW("[node_status_t] Status unknown");
+    // }
 
-    _msg.status = next;
-    _status_publisher.publish(_msg);
+    // DEBUG_VARS(new_status)
+    _msg.status = new_status;
+    if (not _observer_only)
+      _status_publisher.publish(_msg);
   }
 
   StatusType status_preparing(const StatusType new_status)
@@ -224,6 +249,8 @@ private:
   }
 
   interface::NodeStatus _msg;
+
+  bool _observer_only;
 
   ros::Timer _timer;
   ros::Publisher _status_publisher;

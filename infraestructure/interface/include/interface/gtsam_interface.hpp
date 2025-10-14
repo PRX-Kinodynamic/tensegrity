@@ -25,8 +25,6 @@ inline void copy(gtsam::Rot3& rot, const geometry_msgs::Quaternion& quat_msg)
   const double& y{ quat_msg.y };
   const double& z{ quat_msg.z };
   rot = gtsam::Rot3(w, x, y, z);
-  // const Eigen::Quaterniond quat{ rot.toQuaternion() };
-  // copy(quat_msg, quat);
 }
 
 // Out <- In;
@@ -43,11 +41,21 @@ inline void copy(geometry_msgs::Pose& out, const gtsam::Pose3& in)
   copy(out.orientation, in.rotation());
 }
 
+inline void copy(geometry_msgs::Point& pt_out, const Eigen::Vector3d& pt_in)
+{
+  pt_out.x = pt_in[0];
+  pt_out.y = pt_in[1];
+  pt_out.z = pt_in[2];
+}
+
 // Out <- In;
-// inline void copy(gtsam::Pose3& out, const geometry_msgs::Pose& in)
-// {
-//   copy(out.translation(), in.position);
-//   copy(out.rotation(), in.orientation);
-// }
+inline void copy(gtsam::Pose3& out, const geometry_msgs::Pose& in)
+{
+  Eigen::Vector3d t;
+  gtsam::Rot3 R;
+  copy(t, in.position);
+  copy(R, in.orientation);
+  out = gtsam::Pose3(R, t);
+}
 
 }  // namespace interface

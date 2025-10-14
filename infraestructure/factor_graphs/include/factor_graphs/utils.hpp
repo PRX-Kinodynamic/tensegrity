@@ -26,7 +26,7 @@ template <typename Type>
 Type random_uniform(const Type min, const Type max)
 {
   const double val{ internal_random::uniform_zero_one(internal_random::global_generator) };
-  const Type r{ static_cast<Type>(val) * (max - min) + min };
+  const Type r{ static_cast<Type>(val * (max - min) + min) };
   return r;
 }
 

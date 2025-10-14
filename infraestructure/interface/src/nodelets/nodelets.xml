@@ -19,4 +19,9 @@
       TensegrityBars msg to a txt file
     </description>
   </class>
+  <class name="interface/TensegrityBarsArrayToMarkers" type="interface::TensegrityBarsArrayToMarkers"  base_class_type="nodelet::Nodelet">
+    <description> 
+      TensegrityBars msg to a txt file
+    </description>
+  </class>
 </library>

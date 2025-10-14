@@ -3,17 +3,20 @@
     <arg name="loop" default="false"/>
     <!-- <arg name="frequency" default="15"/> -->
     <arg name="max_images" default="1"/>
+    <arg name="fix_dt" default="0.0"/>
 
     <arg name="sim_clock" default="false"/>
     <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
     <arg name="filename_prefix" default="test"/>
     <arg name="output_to_file" default="false"/>
+    <arg name="publish_npy_poses" default="false"/>
+
 
     <param name="/use_sim_time" value="$(arg sim_clock)" />
     <node if="$(arg sim_clock)" pkg="tensegrity_utils" type="sim_clock" name="sim_clock" output="screen" />
 
     <node pkg="interface" type="tensegrity_data_playback.py" name="rgb_imgs"
-         output="screen" required="true">
+         output="screen" >
         <param name="directory" value="$(arg img_directory)/" />
         <param name="rgb_topic_name" value="/images/rgb" />
         <param name="depth_topic_name" value="/images/depth" />
@@ -21,6 +24,12 @@
         <param name="loop" value="$(arg loop)" />
         <param name="filename_prefix" value="$(arg output_dir)/$(arg filename_prefix)" />
         <param name="output_to_file" value="$(arg output_to_file)" />
+        <param name="fix_dt" value="$(arg fix_dt)" />
+        <param name="red_endcaps_topic" value="/gt/red/endcaps" />
+        <param name="green_endcaps_topic" value="/gt/green/endcaps" />
+        <param name="blue_endcaps_topic" value="/gt/blue/endcaps" />
+        <param name="publish_mocaps" value="true"/>
+        <param name="publish_npy_poses" value="$(arg publish_npy_poses)"/>
     </node>
 
 <!--      <node pkg="interface" type="images_to_topic.py" name="rgb_imgs"
@@ -56,5 +65,38 @@
         <arg name="rod_mesh_file" default="$(find interface)/models/bars/struct_with_socks.glb"/>
     </include>
 
+    <node pkg="nodelet" type="nodelet" name="viz_nodelet"  args="manager" output="screen"/>
 
+        <node pkg="nodelet" type="nodelet" name="red_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="/gt/red/endcaps" />
+            <param name="rgba" type="yaml" value="[1.0, 0.0, 0.0, 1.0]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="1000" />
+            <param name="node_id" value="red_endcap_to_marker_gt"/>
+        </node>
+        <node pkg="nodelet" type="nodelet" name="green_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="/gt/green/endcaps" />
+            <param name="rgba" type="yaml" value="[0.0, 1.0, 0.0, 1.0]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="1000" />
+            <param name="node_id" value="green_endcap_to_marker_gt"/>
+        </node>
+        <node pkg="nodelet" type="nodelet" name="blue_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
+            <param name="endcap_topic" value="/gt/blue/endcaps" />
+            <param name="rgba" type="yaml" value="[0.0, 0.0, 1.0, 1.0]" />
+            <param name="point_scale" value="0.03" />
+            <param name="max_endcaps_to_visualize" value="1000" />
+            <param name="node_id" value="blue_endcap_to_marker_gt"/>
+        </node>
+
+
+        <node pkg="nodelet" type="nodelet" name="proposed_bars_to_marker" args="load interface/TensegrityBarsToMarkers viz_nodelet" output="screen">
+            <param name="node_id" value="proposed_bars_to_marker"/>
+            <param name="tensegrity_bars_topicname" value="/tensegrity/poses/proposed" />
+            <param name="tensegrity_markers_topicname" value="/tensegrity/poses/proposed/markers" />
+            <param name="alpha" value="0.5" />
+            <!-- <param name="max_endcaps_to_visualize" value="1" /> -->
+        </node>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="tf_world_mocaps" 
+        args="0.62101386 -0.05195664 -1.0011855 0.2498242, 0.6606265, 0.6518721, 0.2760857 world mocaps" />
 </launch>

@@ -2092,4 +2092,56 @@ private:
   const Rotation _Roff;
   const Translation _offset;
 };
+
+class endcap_observations_t : public gtsam::NoiseModelFactorN<gtsam::Pose3>
+{
+public:
+  using SE3 = gtsam::Pose3;
+  using Translation = Eigen::Vector<double, 3>;
+  using Rotation = gtsam::Rot3;
+  using SkewMatrix = Eigen::Matrix<double, 3, 3>;
+  using Base = gtsam::NoiseModelFactorN<SE3>;
+  using NoiseModel = gtsam::noiseModel::Base::shared_ptr;
+  using Jacobian = Eigen::Matrix<double, 3, 6>;
+  using Meassurement = Eigen::Vector<double, 1>;
+  using Error = Eigen::VectorXd;
+
+  endcap_observations_t(const gtsam::Key key_Xi, const Translation offset, const Translation measurement,
+                        const NoiseModel& cost_model = nullptr)
+    : Base(cost_model, key_Xi), _offset(offset), _measurement(measurement)
+  {
+  }
+
+  static Translation predict(const SE3& xi, const Translation& offset,         // no-lint
+                             gtsam::OptionalJacobian<3, 6> Hxi = boost::none)  // no-lint
+
+  {
+    const Translation pred{ xi.transformFrom(offset, Hxi) };
+
+    return pred;
+  }
+
+  virtual Eigen::VectorXd evaluateError(const SE3& xi,
+                                        boost::optional<Eigen::MatrixXd&> Hx = boost::none) const override
+  {
+    const Translation pred{ predict(xi, _offset, Hx) };
+    const Translation error{ pred - _measurement };
+    return error;
+  }
+
+  void print(const std::string& s, const gtsam::KeyFormatter& keyFormatter) const override
+  {
+    const std::string key_xi{ keyFormatter(this->template key<1>()) };
+    // const std::string plant_name{ _prx_system->get_pathname() };
+    std::cout << s << "Endcap observation Factor:";
+    std::cout << "[ " << key_xi << " ]\n";
+    std::cout << "\t offset: " << _offset.transpose() << "\n";
+    std::cout << "\t measurement: " << _measurement.transpose() << "\n";
+    std::cout << "\n";
+  }
+
+private:
+  const Translation _measurement;
+  const Translation _offset;
+};
 }  // namespace estimation

@@ -1,0 +1,27 @@
+<launch>
+
+    <arg name="filename" default=""/>
+    <arg name="use_cable_sensors" default="true"/>
+	<arg name="frame" default="world"/>
+    <arg name="visualize" default="true"/>
+    <arg name="autostart" default="false"/>
+
+	<node pkg="estimation" type="snapshot_estimation" name="snapshot_estimation" output="screen">
+        <param name="red_endcaps_topic" value="/gt/red/endcaps"/>
+        <param name="blue_endcaps_topic" value="/gt/blue/endcaps"/>
+        <param name="green_endcaps_topic" value="/gt/green/endcaps"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/previous"/>
+        <param name="frame" value="$(arg frame)"/>
+        <param name="poses_filename" value="$(arg filename)"/>
+        <param name="autostart" value="$(arg autostart)"/>
+    </node>
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="snapshot_viz_nodelet"  args="manager" output="screen"/>
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="BarsToMarkersStateEstimation" 
+        args="load interface/TensegrityBarsToMarkers snapshot_viz_nodelet" output="screen">
+        <param name="tensegrity_bars_topicname" value="/tensegrity/pose/previous"/>
+        <param name="tensegrity_markers_topicname" value="/tensegrity/markers"/>
+        <param name="node_id" value="/node/BarsToMarkersStateEstimation"/>
+    </node>
+</launch>
