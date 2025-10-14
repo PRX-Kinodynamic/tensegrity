@@ -26,7 +26,7 @@
 #include <interface/type_conversions.hpp>
 // #include <interface/type_conversions.hpp>
 
-#include <resource_retriever/retriever.h>
+//#include <resource_retriever/retriever.h>
 
 #include <visualization_msgs/MarkerArray.h>
 

@@ -20,7 +20,7 @@
 #include <interface/TensegrityTrajectory.h>
 #include <interface/node_status.hpp>
 
-#include <resource_retriever/retriever.h>
+//#include <resource_retriever/retriever.h>
 
 #include <visualization_msgs/MarkerArray.h>
 

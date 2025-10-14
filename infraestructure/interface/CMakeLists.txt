@@ -17,7 +17,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf_conversions
   tensegrity_utils
   message_generation
-  resource_retriever
+  #  resource_retriever
   factor_graphs
   rosbag
 )
