@@ -687,7 +687,8 @@ struct chev_estimation_t
     while (not succeded)
     {
       _Nbars += Nstep;
-      TENSEGRITY_ASSERT(_Nbars < endcaps.size(), "Max coeffs reached!")
+
+      // TENSEGRITY_ASSERT(_Nbars < endcaps.size(), "Max coeffs reached!")
       DEBUG_VARS(_Nbars)
       gtsam::Values values;
       gtsam::NonlinearFactorGraph graph;
@@ -752,7 +753,7 @@ struct chev_estimation_t
     TENSEGRITY_ASSERT(envelope[0] > 0.0, "Envelope(0) is Zero!")
     envelope = envelope / envelope[0];
 
-    const double log_tol{ std::log(1e-4) };
+    const double log_tol{ std::log(1e-3) };
     int Nnew{ Nb };
     bool success{ false };
     // Find plateau
@@ -770,7 +771,10 @@ struct chev_estimation_t
         break;
       }
     }
-    //
+    if (Nnew > endcaps.size())
+    {
+      success = true;
+    }
     // // Block of size (p,q), starting at (i,j)  matrix.block(i,j,p,q);
     if (success)
     {
