@@ -23,7 +23,12 @@ struct levenberg_marquardt_t
 
   Values optimize(Graph& graph, Values& initial_values, const bool publish)
   {
-    const Values result{ calculate_estimate_safe(graph, initial_values, _lm_params) };
+    return optimize(graph, initial_values, publish, _lm_params);
+  }
+
+  Values optimize(Graph& graph, Values& initial_values, const bool publish, gtsam::LevenbergMarquardtParams& lm_params)
+  {
+    const Values result{ calculate_estimate_safe(graph, initial_values, lm_params) };
 
     if (publish)
     {

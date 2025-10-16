@@ -247,7 +247,7 @@ struct chev_estimation_t
   {
     // lm_params.setVerbosityLM("SILENT");
     _lm_params.setVerbosityLM("SUMMARY");
-    _lm_params.setMaxIterations(100);
+    _lm_params.setMaxIterations(10);
     _lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/state_estimation/fg", _lm_params);
 
     std::string tensegrity_bars_topicname;
@@ -394,7 +394,10 @@ struct chev_estimation_t
 
     if (use_cable_sensors)
     {
-      values = lm_helper->optimize(graph, values, true);
+      gtsam::LevenbergMarquardtParams lm_params;
+      lm_params.setVerbosityLM("SILENT");
+      lm_params.setMaxIterations(1);
+      values = lm_helper->optimize(graph, values, true, lm_params);
       for (int i = 0; i < sensors->size(); ++i)
       {
         const estimation::sensors_callback_t::Meassurements m{ sensors->at(i) };

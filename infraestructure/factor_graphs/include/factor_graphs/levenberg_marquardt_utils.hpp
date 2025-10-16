@@ -26,10 +26,15 @@ struct levenberg_marquardt_t
 
   Values optimize(Graph& graph, Values& initial_values, const bool publish)
   {
+    return optimize(graph, initial_values, publish, _lm_params);
+  }
+
+  Values optimize(Graph& graph, Values& initial_values, const bool publish, const LMParams& lm_params)
+  {
     Values result;
     try
     {
-      gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial_values, _lm_params);
+      gtsam::LevenbergMarquardtOptimizer optimizer(graph, initial_values, lm_params);
       result = optimizer.optimize();
     }
     catch (gtsam::ValuesKeyDoesNotExist e)
