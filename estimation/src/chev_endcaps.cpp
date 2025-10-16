@@ -587,7 +587,8 @@ struct chev_estimation_t
     // int Nlow{ endcaps_test.size() * 0.1 };   // Start with N <- 10% of test
     // int Nhigh{ endcaps_test.size() * 0.5 };  // High set to 0.5 since its highly unlikely that 50% of data is close
     // to chev points
-    int Ni{ static_cast<int>(endcaps_test.size() * 0.1) };
+    int Nstep{ static_cast<int>(endcaps_test.size() * 0.1) };
+    int Ni{ Nstep };
     // auto binary_search = [&](int Ni, int Nlow, int Nhigh) {
     //   _chev_mats = estimate_endcap_trajectory(Ni, endcaps_train, timestamps_train, sensors_callback, cable_map,
     //                                           _lm_helper, a, b);
@@ -599,7 +600,7 @@ struct chev_estimation_t
     // for (int Ni = 10; Ni < 40; ++Ni)
     std::vector<gtsam::ParameterMatrix<3>> curr_cheb_mats;
 
-    while (true)
+    while (Nstep > 1)
     {
       std::vector<gtsam::ParameterMatrix<3>> curr_cheb_mats{ estimate_endcap_trajectory(
           Ni, endcaps_train, timestamps_train, sensors_callback, cable_map, _lm_helper, a, b, use_cable_sensors) };
@@ -610,12 +611,15 @@ struct chev_estimation_t
         prev_err = curr_err;
         _chev_mats.swap(curr_cheb_mats);
         _N = Ni;
-        Ni++;
+        Ni += Nstep;
       }
       else
       {
-        break;
+        Nstep = Nstep / 2;
+        Ni -= Nstep;
+        // break;
       }
+      DEBUG_VARS(prev_err, curr_err, Nstep);
     }
     cheb_endcaps_to_bars();
   }

@@ -1,45 +1,88 @@
 <launch>
 	<arg name="img_directory"/>
 
-  <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
-  <arg name="filename_prefix" default="test"/>
-  <arg name="visualize" default="true"/>
-  <arg name="collect_all_videos" default="false"/>
-  <arg name="collect_overlay_video" default="false"/>
+    <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+    <arg name="filename_prefix" default="test"/>
+    <arg name="visualize" default="true"/>
+    <arg name="collect_all_videos" default="false"/>
+    <arg name="collect_overlay_video" default="false"/>
   
-  <arg name="fix_dt" default="0.1"/>
-  <arg name="use_between_factor" default="false"/>
+    <arg name="fix_dt" default="0.1"/>
+    <arg name="use_between_factor" default="false"/>
   
-  <arg name="max_pts" default="50"/>
-  <arg name="total_sample_bars" default="10"/>
-  <arg name="total_image_points" default="500"/>
+    <arg name="max_pts" default="50"/>
+    <arg name="total_sample_bars" default="10"/>
+    <arg name="total_image_points" default="500"/>
+
+    <arg name="initial_poses_params" value="[/initial/bar/0,/initial/bar/1,/initial/bar/2]"/>
+
   <!-- <arg name="visualize" default="false"/> -->
 
 	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
     <arg name="img_directory" default="$(arg img_directory)"/>
     <arg name="loop" default="false"/>
   	<arg name="max_images" default="1"/>
-    <arg name="sim_clock" default="false"/>
+    <arg name="sim_clock" default="true"/>
   	<!-- <arg name="sim_clock" default="true"/> -->
     <arg name="output_dir" default="$(arg output_dir)"/>
-  	<arg name="fix_dt" default="$(arg fix_dt)"/>
+  	<!-- <arg name="fix_dt" default="$(arg fix_dt)"/> -->
   	<arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>
     <arg name="output_to_file" default="true"/>
   </include>
-
+<!-- 
   <include file="$(find estimation)/launch/snapshot_estimation.launch">
-  </include>
+  </include> -->
 
-  <!-- <node pkg="perception" type="bars_depth_icp" name="bars_depth_icp" output="screen">
+    <node pkg="perception" type="bars_depth_icp" name="bars_depth_icp" output="screen">
+        <param name="node_id" value="/nodes/icp"/>
         <param name="image_topic" value="/images/rgb"/>
         <param name="depth_topic" value="/images/depth"/>
-        <param name="max_pts" value="5000"/>
+        <param name="max_pts" value="350"/>
         <param name="depth_scale" value="4000"/>
         <param name="use_between_factor" value="$(arg use_between_factor)"/>
-        <param name="tensegrity_pose_topic" value="/tensegrity/pose/previous"/>
-    </node> -->
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/current"/>
+        <param name="initial_poses_params" type="yaml" value="$(arg initial_poses_params)"/>
+        <param name="max_iterations" value="100"/>
+    </node>
 
-  <node pkg="perception" type="line_based_estimation" name="line_based_estimation" output="screen">
+    <node pkg="perception" type="tensegrity_initializer" name="tensegrity_initializer" output="screen">
+        <param name="node_id" value="/nodes/initializer"/>
+        <param name="type" value="file"/>
+        <param name="initial_poses_params" type="yaml" value="$(arg initial_poses_params)"/>
+        <param name="initial_filename" value="$(arg img_directory)/initial_estimate.txt"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/initial"/>
+
+    </node>
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="icp_viz_nodelet"  args="manager" output="screen"/>
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="InitBarsToMarkersStateEstimation" 
+        args="load interface/TensegrityBarsToMarkers icp_viz_nodelet" output="screen">
+        <param name="tensegrity_bars_topicname" value="/tensegrity/pose/initial"/>
+        <param name="tensegrity_markers_topicname" value="/tensegrity/pose/initial/markers"/>
+        <param name="node_id" value="/node/InitBarsToMarkersStateEstimation"/>
+    </node>
+
+     <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="BarsToMarkersStateEstimation" 
+        args="load interface/TensegrityBarsToMarkers icp_viz_nodelet" output="screen">
+        <param name="tensegrity_bars_topicname" value="/tensegrity/pose/current"/>
+        <param name="tensegrity_markers_topicname" value="/tensegrity/pose/current/markers"/>
+        <param name="node_id" value="/node/BarsToMarkersStateEstimation"/>
+    </node>
+
+    <node pkg="perception" type="pointcloud_from_imgs" name="pointcloud_from_imgs" required="true">
+        <param name="node_id" value="/nodes/pointcloud"/>
+        <param name="image_topic" value="/images/rgb"/>
+        <param name="depth_topic" value="/images/depth"/>
+        <param name="depth_scale" value="4000"/>
+        <param name="camera_frame" value="real_sense"/>
+        <param name="world_frame" value="world"/>
+        <param name="camera_info_topic" value="/real_sense/info"/>
+        <param name="visualize" value="true"/>
+        <param name="initial_states_file" value="$(arg img_directory)/initial_estimate.txt"/>
+    </node>
+
+<!--   <node pkg="perception" type="line_based_estimation" name="line_based_estimation" output="screen">
       <param name="image_topic" value="/images/rgb"/>
       <param name="depth_topic" value="/images/depth"/>
       <param name="max_pts" value="$(arg max_pts)"/>
@@ -49,7 +92,7 @@
       <param name="total_sample_bars" value="$(arg total_sample_bars)"/>
       <param name="total_image_points" value="$(arg total_image_points)"/>
       <param name="visualize" value="$(arg visualize)"/>
-  </node>
+  </node> -->
 
   <!-- <node pkg="nodelet" type="nodelet" name="TensegrityBarsArrayToMarkers" args="standalone interface/TensegrityBarsArrayToMarkers">
     <param name="node_id" value="BarsArraytoMarker"/>

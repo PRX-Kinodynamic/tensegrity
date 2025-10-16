@@ -199,6 +199,7 @@ struct observation_update_t
   gtsam::Rot3 Roffset;
 
   OptSE3 pose = {};
+  gtsam::Key key_se3;
 };
 
 void add_two_observations(observation_update_t& observation_update, gtsam::NonlinearFactorGraph& graph,
@@ -224,6 +225,7 @@ void add_two_observations(observation_update_t& observation_update, gtsam::Nonli
   const gtsam::Key key_se3{ estimation::rod_symbol(color, idx, j) };
   const gtsam::Key key_rotA_offset{ estimation::rotation_symbol(color, idx, 0) };
   const gtsam::Key key_rotB_offset{ estimation::rotation_symbol(color, idx, 1) };
+  observation_update.key_se3 = key_se3;
 
   graph.emplace_shared<EndcapObservationFactor>(key_se3, key_rotA_offset, zA, offset, z_noise);
   graph.emplace_shared<EndcapObservationFactor>(key_se3, key_rotB_offset, zB, offset, z_noise);

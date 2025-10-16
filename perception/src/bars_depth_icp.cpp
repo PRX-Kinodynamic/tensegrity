@@ -99,14 +99,14 @@ public:
   {
   }
 
-  virtual bool active(const gtsam::Values& values) const override
-  {
-    if (_gnn_avg)
-    {
-      return _gnn_distance < (*_gnn_avg);
-    }
-    return true;
-  }
+  // virtual bool active(const gtsam::Values& values) const override
+  // {
+  //   if (_gnn_avg)
+  //   {
+  //     return _gnn_distance < (*_gnn_avg);
+  //   }
+  //   return true;
+  // }
 
   virtual Eigen::VectorXd evaluateError(const SE3& xi,  // no-lint
                                         boost::optional<Eigen::MatrixXd&> Hxi = boost::none) const override
@@ -129,6 +129,22 @@ public:
       *Hxi = bpt_H_xi;
     }
     return error;
+  }
+
+  void print(const std::string& s, const gtsam::KeyFormatter& keyFormatter) const override
+  {
+    const std::string key_x{ keyFormatter(this->template key<1>()) };
+
+    // const std::string plant_name{ _prx_system->get_pathname() };
+    std::cout << s << " ";
+    std::cout << "[ " << key_x << "]\n";
+    std::cout << "\t z: " << _meassured_pt.transpose() << "\n";
+
+    if (this->noiseModel_)
+      this->noiseModel_->print("  noise model: ");
+    else
+      std::cout << "no noise model" << std::endl;
+    std::cout << "\n";
   }
 
 private:
@@ -403,7 +419,8 @@ struct tensegrity_3d_icp_t
 {
   using This = tensegrity_3d_icp_t;
   int max_iterations;
-  gtsam::Pose3 red_pose, green_pose, blue_pose;
+  // gtsam::Pose3 red_pose, green_pose, blue_pose;
+  std::array<gtsam::Pose3, 3> poses;
 
   cv::Scalar low_red;
   cv::Scalar high_red;
@@ -440,6 +457,12 @@ struct tensegrity_3d_icp_t
   bool bars_poses_received, rgb_received, depth_received;
   gtsam::LevenbergMarquardtParams lm_params;
   std::shared_ptr<factor_graphs::levenberg_marquardt_t> lm_helper;
+  std::shared_ptr<interface::node_status_t> _node_status;
+
+  std::vector<std::string> initial_poses_params;
+  ros::Publisher tensegrity_bars_publisher;
+
+  std::chrono::time_point<std::chrono::steady_clock> start, finish;
 
   tensegrity_3d_icp_t(ros::NodeHandle& nh)
     : max_iterations(10)
@@ -462,15 +485,23 @@ struct tensegrity_3d_icp_t
     lm_params.setMaxIterations(10);
     lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/icp/fg", lm_params);
 
+    _node_status = interface::node_status_t::create(nh, false);
+
     PARAM_SETUP(nh, image_topic);
     PARAM_SETUP(nh, depth_topic);
     PARAM_SETUP(nh, max_pts);
     PARAM_SETUP(nh, depth_scale);
 
     PARAM_SETUP(nh, tensegrity_pose_topic);
+    // PARAM_SETUP(nh, initial_file);
     PARAM_SETUP(nh, use_between_factor);
+    PARAM_SETUP(nh, initial_poses_params);
+    PARAM_SETUP_WITH_DEFAULT(nh, max_iterations, max_iterations);
 
-    tensegrity_bars_subscriber = nh.subscribe(tensegrity_pose_topic, 1, &This::pose_callback, this);
+    // init_from_file(initial_file);
+    tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
+
+    // tensegrity_bars_subscriber = nh.subscribe(tensegrity_pose_topic, 1, &This::pose_callback, this);
 
     pub0_rgb_masks = nh.advertise<sensor_msgs::Image>("/img0/rgb_masks", 1, true);
     pub0_all_masks = nh.advertise<sensor_msgs::Image>("/img0/all_masks", 1, true);
@@ -507,13 +538,36 @@ struct tensegrity_3d_icp_t
     camera = Camera(gtsam::Pose3(extrinsic), camera_calibration);
   }
 
-  void pose_callback(const interface::TensegrityBarsConstPtr msg)
+  void init_poses()
   {
-    red_pose = tensegrity::utils::convert_to<gtsam::Pose3>(msg->bar_red);
-    green_pose = tensegrity::utils::convert_to<gtsam::Pose3>(msg->bar_green);
-    blue_pose = tensegrity::utils::convert_to<gtsam::Pose3>(msg->bar_blue);
-    bars_poses_received = true;
+    bool all_poses_received{ true };
+    for (int i = 0; i < initial_poses_params.size(); ++i)
+    {
+      // Assuming pose = (quat, pos)
+      std::vector<double> params_in;
+      all_poses_received &= tensegrity::utils::param_check_then_get(initial_poses_params[i], params_in);
+      DEBUG_VARS(i, all_poses_received)
+      if (all_poses_received)
+      {
+        gtsam::Rot3 quat(params_in[0], params_in[1], params_in[2], params_in[3]);
+        Eigen::Vector3d position(params_in[4], params_in[5], params_in[6]);
+        poses[i] = gtsam::Pose3(quat, position);
+      }
+    }
+
+    if (all_poses_received)
+    {
+      _node_status->status(interface::NodeStatus::READY);
+    }
   }
+
+  // void pose_callback(const interface::TensegrityBarsConstPtr msg)
+  // {
+  //   red_pose = tensegrity::utils::convert_to<gtsam::Pose3>(msg->bar_red);
+  //   green_pose = tensegrity::utils::convert_to<gtsam::Pose3>(msg->bar_green);
+  //   blue_pose = tensegrity::utils::convert_to<gtsam::Pose3>(msg->bar_blue);
+  //   bars_poses_received = true;
+  // }
 
   void image_callback(const sensor_msgs::ImageConstPtr message)
   {
@@ -526,6 +580,21 @@ struct tensegrity_3d_icp_t
     cv_bridge::CvImageConstPtr frame{ cv_bridge::toCvShare(message) };
     frame->image.copyTo(img_depth);
     depth_received = true;
+  }
+
+  void time_meassurement(const std::string id, const bool end)
+  {
+    if (not end)
+    {
+      start = std::chrono::steady_clock::now();
+    }
+    else
+    {
+      finish = std::chrono::steady_clock::now();
+      const std::chrono::duration<double> elapsed_seconds{ finish - start };
+      const double dt{ elapsed_seconds.count() };
+      DEBUG_VARS(id, dt);
+    }
   }
 
   void run_icp()
@@ -549,15 +618,17 @@ struct tensegrity_3d_icp_t
     publish_img(color_masks, pub0_rgb_masks, "mono8");
     publish_img(all_masks, pub0_all_masks, "mono8");
 
+    time_meassurement("imgs_to_pointcloud", false);
     std::vector<PointColor> red_target_3dpc, blue_target_3dpc, green_target_3dpc, black_target_3dpc;
-    int red_pts{ imgs_to_pointcloud(red_target_3dpc, _frame_red0, img_depth, 2 * max_pts * 0.3, depth_scale, camera,
-                                    red) };
-    int green_pts{ imgs_to_pointcloud(green_target_3dpc, _frame_green, img_depth, 2 * max_pts * 0.3, depth_scale,
-                                      camera, green) };
-    int blue_pts{ imgs_to_pointcloud(blue_target_3dpc, _frame_blue, img_depth, 2 * max_pts * 0.3, depth_scale, camera,
+    int red_pts{ imgs_to_pointcloud(red_target_3dpc, _frame_red0, img_depth, max_pts * 0.2, depth_scale, camera, red) };
+    int green_pts{ imgs_to_pointcloud(green_target_3dpc, _frame_green, img_depth, max_pts * 0.2, depth_scale, camera,
+                                      green) };
+    int blue_pts{ imgs_to_pointcloud(blue_target_3dpc, _frame_blue, img_depth, max_pts * 0.2, depth_scale, camera,
                                      blue) };
-    int black_pts{ imgs_to_pointcloud(black_target_3dpc, _frame_black, img_depth, 2 * max_pts * 0.1, depth_scale,
-                                      camera, black) };
+    int black_pts{ imgs_to_pointcloud(black_target_3dpc, _frame_black, img_depth, max_pts * 0.4, depth_scale, camera,
+                                      black) };
+    time_meassurement("imgs_to_pointcloud", true);
+
     // const int tot_red{ mask_to_2d_pointcloud(target_2dpc, _frame_red0, red, max_pts * 0.3) };
     // const int tot_black{ mask_to_2d_pointcloud(target_2dpc, _frame_black, black, max_pts * 0.7) };
 
@@ -568,6 +639,7 @@ struct tensegrity_3d_icp_t
     // std::vector<double> depths(target_2dpc.size(), 1.4);
     // compute_target_pointcloud(target_2dpc, target_3dpc, depths, camera);
 
+    time_meassurement("offsets", false);
     std::vector<PointColor> red_endcap_sim_pts, green_endcap_sim_pts, blue_endcap_sim_pts;
     std::vector<PointColor> red_bar_sim_pts, green_bar_sim_pts, blue_bar_sim_pts;
     endcap_offsets(red_endcap_sim_pts, red_pts, red);
@@ -576,6 +648,7 @@ struct tensegrity_3d_icp_t
     bar_offsets(red_bar_sim_pts, black_pts * 0.5);
     bar_offsets(green_bar_sim_pts, black_pts * 0.5);
     bar_offsets(blue_bar_sim_pts, black_pts * 0.5);
+    time_meassurement("offsets", true);
 
     visualization_msgs::Marker img_marker;
     visualization_msgs::Marker red_marker;
@@ -583,14 +656,14 @@ struct tensegrity_3d_icp_t
     visualization_msgs::Marker blue_marker;
     visualization_msgs::Marker red_matches_marker, green_matches_marker, blue_matches_marker;
 
-    update_marker(red_marker, red_bar_sim_pts, red_pose);
-    update_marker(green_marker, green_bar_sim_pts, green_pose);
-    update_marker(blue_marker, blue_bar_sim_pts, blue_pose);
+    // update_marker(red_marker, red_bar_sim_pts, red_pose);
+    // update_marker(green_marker, green_bar_sim_pts, green_pose);
+    // update_marker(blue_marker, blue_bar_sim_pts, blue_pose);
 
-    update_marker(img_marker, red_target_3dpc, gtsam::Pose3(), true);
-    update_marker(img_marker, blue_target_3dpc, gtsam::Pose3(), false);
-    update_marker(img_marker, green_target_3dpc, gtsam::Pose3(), false);
-    update_marker(img_marker, black_target_3dpc, gtsam::Pose3(), false);
+    // update_marker(img_marker, red_target_3dpc, gtsam::Pose3(), true);
+    // update_marker(img_marker, blue_target_3dpc, gtsam::Pose3(), false);
+    // update_marker(img_marker, green_target_3dpc, gtsam::Pose3(), false);
+    // update_marker(img_marker, black_target_3dpc, gtsam::Pose3(), false);
 
     // pub_red_marker.publish(red_marker);
     pub_img_marker.publish(img_marker);
@@ -600,86 +673,86 @@ struct tensegrity_3d_icp_t
     double dummy;
     int iterations{ 0 };
 
-    const gtsam::Pose3 red_green_btw{ gtsam::traits<gtsam::Pose3>::Between(red_pose, green_pose) };
-    const gtsam::Pose3 red_blue_btw{ gtsam::traits<gtsam::Pose3>::Between(red_pose, blue_pose) };
-    const gtsam::Pose3 green_blue_btw{ gtsam::traits<gtsam::Pose3>::Between(green_pose, blue_pose) };
+    const gtsam::Pose3 red_green_btw{ gtsam::traits<gtsam::Pose3>::Between(poses[0], poses[1]) };
+    const gtsam::Pose3 red_blue_btw{ gtsam::traits<gtsam::Pose3>::Between(poses[0], poses[2]) };
+    const gtsam::Pose3 green_blue_btw{ gtsam::traits<gtsam::Pose3>::Between(poses[1], poses[2]) };
 
-    gtsam::noiseModel::Base::shared_ptr btw_noise{ gtsam::noiseModel::Isotropic::Sigma(6, 1e-3) };
+    gtsam::noiseModel::Base::shared_ptr btw_noise{ gtsam::noiseModel::Isotropic::Sigma(6, 1e-2) };
+    time_meassurement("gnn", false);
+    Gnn gnn{};
+    Gnn gnn_green{};
+    Gnn gnn_red{};
+    Gnn gnn_blue{};
+    add_to_gnn(gnn, black_target_3dpc);
+    add_to_gnn(gnn_red, red_target_3dpc);
+    add_to_gnn(gnn_green, green_target_3dpc);
+    add_to_gnn(gnn_blue, blue_target_3dpc);
+    time_meassurement("gnn", true);
 
-    while (error > 1.0 and error_change > 1.0 and iterations < max_iterations)
+    std::vector<PointColor> red_matches, blue_matches, green_matches;
+    while (error > 1e-2 and error_change > 1e-3 and iterations < max_iterations)
     {
-      Gnn gnn{};
-      Gnn gnn_red{};
-      Gnn gnn_green{};
-      Gnn gnn_blue{};
       gtsam::NonlinearFactorGraph graph;
       gtsam::Values values;
       // DEBUG_VARS(error);
       const gtsam::Key kred{ gtsam::Symbol('r', 0) };
       const gtsam::Key kgreen{ gtsam::Symbol('g', 0) };
       const gtsam::Key kblue{ gtsam::Symbol('b', 0) };
-      values.insert(kred, red_pose);
-      values.insert(kgreen, green_pose);
-      values.insert(kblue, blue_pose);
-
-      add_to_gnn(gnn, black_target_3dpc);
-      add_to_gnn(gnn_red, red_target_3dpc);
-      add_to_gnn(gnn_green, green_target_3dpc);
-      add_to_gnn(gnn_blue, blue_target_3dpc);
+      values.insert(kred, poses[0]);
+      values.insert(kgreen, poses[1]);
+      values.insert(kblue, poses[2]);
 
       // NodePtr node;
       // double distance;
+      red_matches.clear();
+      blue_matches.clear();
+      green_matches.clear();
+      time_meassurement("add_bar_factors", false);
+      add_bar_factors(graph, red_endcap_sim_pts, poses[0], red_target_3dpc, kred, gnn_red, red_matches);
+      add_bar_factors(graph, green_endcap_sim_pts, poses[1], green_target_3dpc, kgreen, gnn_green, green_matches);
+      add_bar_factors(graph, blue_endcap_sim_pts, poses[2], blue_target_3dpc, kblue, gnn_blue, blue_matches);
 
-      std::vector<PointColor> red_matches, blue_matches, green_matches;
-      add_bar_factors(graph, red_endcap_sim_pts, red_pose, red_target_3dpc, kred, gnn_red, red_matches);
-      add_bar_factors(graph, green_endcap_sim_pts, green_pose, green_target_3dpc, kgreen, gnn_green, green_matches);
-      add_bar_factors(graph, blue_endcap_sim_pts, blue_pose, blue_target_3dpc, kblue, gnn_blue, blue_matches);
-      add_bar_factors(graph, red_bar_sim_pts, red_pose, black_target_3dpc, kred, gnn, red_matches);
-      add_bar_factors(graph, green_bar_sim_pts, green_pose, black_target_3dpc, kgreen, gnn, green_matches);
-      add_bar_factors(graph, blue_bar_sim_pts, blue_pose, black_target_3dpc, kblue, gnn, blue_matches);
+      add_bar_factors(graph, red_bar_sim_pts, poses[0], black_target_3dpc, kred, gnn, red_matches);
+      add_bar_factors(graph, green_bar_sim_pts, poses[1], black_target_3dpc, kgreen, gnn, green_matches);
+      add_bar_factors(graph, blue_bar_sim_pts, poses[2], black_target_3dpc, kblue, gnn, blue_matches);
+      time_meassurement("add_bar_factors", true);
 
-      if (use_between_factor)
-      {
-        graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(kred, kgreen, red_green_btw, btw_noise);
-        graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(kred, kblue, red_blue_btw, btw_noise);
-        graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(kgreen, kblue, green_blue_btw, btw_noise);
-      }
+      // if (use_between_factor)
+      // {
+      graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(kred, kgreen, red_green_btw, btw_noise);
+      graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(kred, kblue, red_blue_btw, btw_noise);
+      graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(kgreen, kblue, green_blue_btw, btw_noise);
+      // }
 
+      time_meassurement("optimize", false);
       const gtsam::Values result{ lm_helper->optimize(graph, values, true) };
+      time_meassurement("optimize", true);
       const gtsam::Pose3 new_red{ result.at<gtsam::Pose3>(kred) };
       const gtsam::Pose3 new_green{ result.at<gtsam::Pose3>(kgreen) };
       const gtsam::Pose3 new_blue{ result.at<gtsam::Pose3>(kblue) };
 
       const double prev_error{ error };
+      // graph.printErrors(result, "Res ");
       error = graph.error(result);
       error_change = std::fabs(prev_error - error);
 
-      update_marker(red_marker, red_endcap_sim_pts, red_pose, true);
-      update_marker(red_marker, red_bar_sim_pts, red_pose, false);
-      update_matches_marker(red_matches_marker, red_matches);
-
-      update_marker(green_marker, green_endcap_sim_pts, green_pose);
-      update_marker(green_marker, green_bar_sim_pts, green_pose, false);
-      update_matches_marker(green_matches_marker, green_matches);
-
-      update_marker(blue_marker, blue_endcap_sim_pts, blue_pose);
-      update_marker(blue_marker, blue_bar_sim_pts, blue_pose, false);
-      update_matches_marker(blue_matches_marker, blue_matches);
-
-      pub_red_marker.publish(red_marker);
-      pub_green_marker.publish(green_marker);
-      pub_blue_marker.publish(blue_marker);
-      pub_red_matches.publish(red_matches_marker);
-      pub_green_matches.publish(green_matches_marker);
-      pub_blue_matches.publish(blue_matches_marker);
-      //   pub_img_red_marker.publish(red_img_marker);
-
-      red_pose = new_red;
-      green_pose = new_green;
-      blue_pose = new_blue;
+      poses[0] = new_red;
+      poses[1] = new_green;
+      poses[2] = new_blue;
       iterations++;
+
       // std::cin >> dummy;
     }
+    DEBUG_VARS(error, error_change, iterations, max_iterations)
+    DEBUG_VARS(error > 1.0, error_change > 1.0, iterations < max_iterations)
+    update_matches_marker(red_matches_marker, red_matches);
+    update_matches_marker(green_matches_marker, green_matches);
+    update_matches_marker(blue_matches_marker, blue_matches);
+
+    pub_red_matches.publish(red_matches_marker);
+    pub_green_matches.publish(green_matches_marker);
+    pub_blue_matches.publish(blue_matches_marker);
+    estimation::publish_tensegrity_msg(poses[0], poses[1], poses[2], tensegrity_bars_publisher, "world", 0);
   }
 };
 
@@ -691,15 +764,25 @@ int main(int argc, char** argv)
   tensegrity_3d_icp_t node(nh);
   while (ros::ok())
   {
-    if (node.bars_poses_received and node.rgb_received and node.depth_received)
+    if (node._node_status->status() == interface::NodeStatus::PREPARING)
     {
-      // PRINT_MSG("Running icp");
-      auto start = ros::Time::now();
-      node.run_icp();
-      auto end = ros::Time::now();
-      auto iter_dt = (end - start).toSec();
-      DEBUG_VARS(iter_dt)
+      node.init_poses();
     }
+    else if (node._node_status->status() == interface::NodeStatus::RUNNING and node.rgb_received and
+             node.depth_received)
+    {
+      PRINT_MSG("Running icp");
+      const auto start = std::chrono::steady_clock::now();
+      // auto start = ros::Time::now();
+      node.run_icp();
+      const auto finish = std::chrono::steady_clock::now();
+      const std::chrono::duration<double> elapsed_seconds{ finish - start };
+      const double icp_dt{ elapsed_seconds.count() };
+      // auto end = ros::Time::now();
+      // auto iter_dt = (end - start).toSec();
+      DEBUG_VARS(icp_dt)
+    }
+    // DEBUG_VARS(node._node_status->status());
     ros::spinOnce();
   }
   // std::string img0_path, imgd_path;
