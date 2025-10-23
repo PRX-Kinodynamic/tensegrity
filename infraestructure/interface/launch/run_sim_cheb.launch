@@ -14,6 +14,7 @@
     <arg name="cable_map_filename" default="cable_map.txt"/>
     <arg name="use_cable_sensors" default="true"/>
     <arg name="autostart" default="false"/>
+    <arg name="max_time" default="-1"/>
 
 
     <include file="$(find interface)/launch/simulated_data.launch">
@@ -35,6 +36,7 @@
         <arg name="sim_clock" default="false"/>
         <arg name="endcap_swap_probability" default="0.0"/>
         <arg name="visualize" default="$(arg visualize)"/>
+        <arg name="max_time" default="$(arg max_time)"/>
         <arg name="filename_prefix" default="$(arg output_dir)/$(arg filename_prefix)"/>
     </include>
 
