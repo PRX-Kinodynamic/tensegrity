@@ -150,7 +150,8 @@ class SimDataPublisher(object):
 
     def create_transform(self, position, quat):
         quat_np = np.array(quat, np.float32)
-        rot = SciPyRot.from_quat(quat_np, scalar_first=True) # W is first
+        #rot = SciPyRot.from_quat(quat_np, scalar_first=True) # W is first
+        rot = SciPyRot.from_quat([quat_np[1], quat_np[2], quat_np[3], quat_np[0]]) # W is first
         
         tr = np.array(position, np.float32) * self.data_scale_factor
         T = np.identity(4)
