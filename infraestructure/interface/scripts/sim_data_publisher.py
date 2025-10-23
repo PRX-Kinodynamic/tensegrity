@@ -41,6 +41,7 @@ class SimDataPublisher(object):
         self.pub_frequency = rospy.get_param("~pub_frequency", 30)
         self.data_frequency = rospy.get_param("~data_frequency", 200)
         self.loop = rospy.get_param("~loop", True)
+        self.max_time = rospy.get_param("~max_time", -1) # Publish trajectory up to max_time: x_t \in [0,max_time]. -1 == all
         
         self.data_file = rospy.get_param("~data_file", "")
         self.data_frame = rospy.get_param("~data_frame", "data")
@@ -186,6 +187,16 @@ class SimDataPublisher(object):
             sp = line.split()
             self.traj.append(self.get_values(sp))
 
+        # print(f"total states: {len(self.traj)} {len(self.lines)}")
+        if self.max_time >= 0:
+            # data_step = 1.0 / self.data_frequency
+            max_T = self.max_time * self.data_frequency
+            if max_T < len(self.lines):
+                self.traj = self.traj[:max_T]
+                self.lines = self.lines[:max_T]
+            # print(f"total states: {len(self.traj)}")
+
+        # self.step = self.data_frequency / self.pub_frequency
         # print(f"traj[0]: {self.traj[0]}")
         # print(f"traj len: {len(self.traj)}")
 
@@ -202,7 +213,8 @@ class SimDataPublisher(object):
         if self.file is not None:
             ti = rospy.Time.now().to_sec()
             # print(f"ti {ti} prev {prev} idx {idx}")
-            for i in range(prev, idx+1):
+
+            for i in range(prev, min(idx+1, len(self.lines))):
                 line = str(ti) + " " +  self.lines[i];
                 self.file.write(line)
                 ti += dt
@@ -445,7 +457,7 @@ class SimDataPublisher(object):
         if self.node_status.status != NodeStatus.RUNNING:
             return
 
-        if self.state_idx + self.step > len(self.traj):
+        if self.state_idx + self.step >= len(self.traj):
             if self.loop:
                 self.state_idx += self.step
                 self.state_idx = self.state_idx - len(self.traj)

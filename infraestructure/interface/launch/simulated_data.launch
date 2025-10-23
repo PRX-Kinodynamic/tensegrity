@@ -20,6 +20,7 @@
     <arg name="filename_prefix" default="test_sim"/>
     <arg name="sensors_topic_name" default="/tensegrity/sensors"/>
     <arg name="data_frame" default="world"/>
+    <arg name="max_time" default="-1"/>
 
 
     <param name="/use_sim_time" value="$(arg sim_clock)" />
@@ -48,6 +49,7 @@
         <param name="filename_prefix" value="$(arg filename_prefix)"/>
         <param name="sensors_topic_name" value="$(arg sensors_topic_name)"/>
         <param name="data_frame" value="$(arg data_frame)"/>
+        <param name="max_time" value="$(arg max_time)"/>
         
     </node>
 

@@ -182,8 +182,8 @@ void locations_to_keypoints(std::vector<cv::Point>& lcs, std::vector<cv::KeyPoin
   }
 }
 
-int imgs_to_pointcloud(std::vector<PointColor>& pc, cv::Mat& mask, cv::Mat& depth, std::size_t max_pts,
-                       double depth_scale, const Camera& camera, const Color& color)
+int imgs_to_pointcloud(std::vector<PointColor>& pc, cv::Mat& mask, cv::Mat& depth, double pts_rate, double depth_scale,
+                       const Camera& camera, const Color& color)
 {
   int tot{ 0 };
   std::vector<cv::Point> pixels;
@@ -193,7 +193,7 @@ int imgs_to_pointcloud(std::vector<PointColor>& pc, cv::Mat& mask, cv::Mat& dept
   // cv::findContours(mask, _contours_out, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
   // DEBUG_VARS(stddev);
   // DEBUG_VARS(pixels.size());
-  const std::size_t true_max_pts{ std::min(pixels.size(), max_pts) };
+  const double true_max_pts{ pixels.size() * pts_rate };
   for (int i = 0; i < true_max_pts; ++i)
   {
     const std::size_t idx{ factor_graphs::random_uniform<std::size_t>(0, pixels.size()) };
@@ -431,8 +431,8 @@ struct tensegrity_3d_icp_t
   cv::Scalar low_black;
   cv::Scalar high_black;
 
-  int max_pts;
-  double depth_scale;
+  // int max_pts;
+  double depth_scale, pts_rate;
   std::string image_topic, depth_topic;
   cv_bridge::CvImagePtr depth_frame;
 
@@ -452,6 +452,7 @@ struct tensegrity_3d_icp_t
   ros::Publisher pub_red_matches;
   ros::Publisher pub_green_matches;
   ros::Publisher pub_blue_matches, pub_img_marker;
+  ros::Publisher tensegrity_endcaps_publisher;
 
   bool use_between_factor;
   bool bars_poses_received, rgb_received, depth_received;
@@ -463,6 +464,7 @@ struct tensegrity_3d_icp_t
   ros::Publisher tensegrity_bars_publisher;
 
   std::chrono::time_point<std::chrono::steady_clock> start, finish;
+  ros::Time stamp;
 
   tensegrity_3d_icp_t(ros::NodeHandle& nh)
     : max_iterations(10)
@@ -478,7 +480,7 @@ struct tensegrity_3d_icp_t
     , rgb_received(false)
     , depth_received(false)
   {
-    std::string tensegrity_pose_topic;
+    std::string tensegrity_pose_topic, tensegrity_endcaps_topic;
 
     lm_params.setVerbosityLM("SILENT");
     // lm_params.setVerbosityLM("SUMMARY");
@@ -489,13 +491,14 @@ struct tensegrity_3d_icp_t
 
     PARAM_SETUP(nh, image_topic);
     PARAM_SETUP(nh, depth_topic);
-    PARAM_SETUP(nh, max_pts);
+    PARAM_SETUP(nh, pts_rate);
     PARAM_SETUP(nh, depth_scale);
 
     PARAM_SETUP(nh, tensegrity_pose_topic);
     // PARAM_SETUP(nh, initial_file);
     PARAM_SETUP(nh, use_between_factor);
     PARAM_SETUP(nh, initial_poses_params);
+    PARAM_SETUP(nh, tensegrity_endcaps_topic);
     PARAM_SETUP_WITH_DEFAULT(nh, max_iterations, max_iterations);
 
     // init_from_file(initial_file);
@@ -513,6 +516,7 @@ struct tensegrity_3d_icp_t
     pub_green_matches = nh.advertise<visualization_msgs::Marker>("/bars/green/matches", 1, true);
     pub_blue_matches = nh.advertise<visualization_msgs::Marker>("/bars/blue/matches", 1, true);
     pub_img_marker = nh.advertise<visualization_msgs::Marker>("/img0/pointcloud", 1, true);
+    tensegrity_endcaps_publisher = nh.advertise<interface::TensegrityEndcaps>(tensegrity_endcaps_topic, 1, true);
 
     image_subscriber = nh.subscribe(image_topic, 1, &This::image_callback, this);
     depth_subscriber = nh.subscribe(depth_topic, 1, &This::depth_callback, this);
@@ -546,7 +550,7 @@ struct tensegrity_3d_icp_t
       // Assuming pose = (quat, pos)
       std::vector<double> params_in;
       all_poses_received &= tensegrity::utils::param_check_then_get(initial_poses_params[i], params_in);
-      DEBUG_VARS(i, all_poses_received)
+      // DEBUG_VARS(i, all_poses_received)
       if (all_poses_received)
       {
         gtsam::Rot3 quat(params_in[0], params_in[1], params_in[2], params_in[3]);
@@ -573,6 +577,7 @@ struct tensegrity_3d_icp_t
   {
     cv_bridge::CvImageConstPtr frame{ cv_bridge::toCvShare(message) };
     cv::cvtColor(frame->image, img_hsv, cv::COLOR_BGR2HSV);
+    stamp = message->header.stamp;
     rgb_received = true;
   }
   void depth_callback(const sensor_msgs::ImageConstPtr message)
@@ -584,17 +589,40 @@ struct tensegrity_3d_icp_t
 
   void time_meassurement(const std::string id, const bool end)
   {
-    if (not end)
+    // if (not end)
+    // {
+    //   start = std::chrono::steady_clock::now();
+    // }
+    // else
+    // {
+    //   finish = std::chrono::steady_clock::now();
+    //   const std::chrono::duration<double> elapsed_seconds{ finish - start };
+    //   const double dt{ elapsed_seconds.count() };
+    //   DEBUG_VARS(id, dt);
+    // }
+  }
+
+  void publish_endcaps(const std::array<std::vector<Eigen::Vector3d>, 3>& pts)
+  {
+    using tensegrity::utils::convert_to;
+
+    interface::TensegrityEndcaps msg;
+    tensegrity::utils::init_header(msg.header, "world");
+    msg.message = "PointcloudFromImgs";
+    msg.header.stamp = stamp;
+    // DEBUG_VARS(seq);
+    for (int idx = 0; idx < 3; ++idx)
     {
-      start = std::chrono::steady_clock::now();
+      for (int i = 0; i < pts[idx].size(); ++i)
+      {
+        const Eigen::Vector3d z{ pts[idx][i] };
+        msg.endcaps.push_back(convert_to<geometry_msgs::Point>(z));
+        msg.ids.push_back(idx);
+        msg.scores.push_back(1);
+      }
     }
-    else
-    {
-      finish = std::chrono::steady_clock::now();
-      const std::chrono::duration<double> elapsed_seconds{ finish - start };
-      const double dt{ elapsed_seconds.count() };
-      DEBUG_VARS(id, dt);
-    }
+    tensegrity_endcaps_publisher.publish(msg);
+    // const Eigen::Vector3d zB{ pts[idx][j] };
   }
 
   void run_icp()
@@ -620,12 +648,11 @@ struct tensegrity_3d_icp_t
 
     time_meassurement("imgs_to_pointcloud", false);
     std::vector<PointColor> red_target_3dpc, blue_target_3dpc, green_target_3dpc, black_target_3dpc;
-    int red_pts{ imgs_to_pointcloud(red_target_3dpc, _frame_red0, img_depth, max_pts * 0.2, depth_scale, camera, red) };
-    int green_pts{ imgs_to_pointcloud(green_target_3dpc, _frame_green, img_depth, max_pts * 0.2, depth_scale, camera,
+    int red_pts{ imgs_to_pointcloud(red_target_3dpc, _frame_red0, img_depth, pts_rate, depth_scale, camera, red) };
+    int green_pts{ imgs_to_pointcloud(green_target_3dpc, _frame_green, img_depth, pts_rate, depth_scale, camera,
                                       green) };
-    int blue_pts{ imgs_to_pointcloud(blue_target_3dpc, _frame_blue, img_depth, max_pts * 0.2, depth_scale, camera,
-                                     blue) };
-    int black_pts{ imgs_to_pointcloud(black_target_3dpc, _frame_black, img_depth, max_pts * 0.4, depth_scale, camera,
+    int blue_pts{ imgs_to_pointcloud(blue_target_3dpc, _frame_blue, img_depth, pts_rate, depth_scale, camera, blue) };
+    int black_pts{ imgs_to_pointcloud(black_target_3dpc, _frame_black, img_depth, pts_rate, depth_scale, camera,
                                       black) };
     time_meassurement("imgs_to_pointcloud", true);
 
@@ -743,8 +770,8 @@ struct tensegrity_3d_icp_t
 
       // std::cin >> dummy;
     }
-    DEBUG_VARS(error, error_change, iterations, max_iterations)
-    DEBUG_VARS(error > 1.0, error_change > 1.0, iterations < max_iterations)
+    // DEBUG_VARS(error, error_change, iterations, max_iterations)
+    // DEBUG_VARS(error > 1.0, error_change > 1.0, iterations < max_iterations)
     update_matches_marker(red_matches_marker, red_matches);
     update_matches_marker(green_matches_marker, green_matches);
     update_matches_marker(blue_matches_marker, blue_matches);
@@ -753,6 +780,15 @@ struct tensegrity_3d_icp_t
     pub_green_matches.publish(green_matches_marker);
     pub_blue_matches.publish(blue_matches_marker);
     estimation::publish_tensegrity_msg(poses[0], poses[1], poses[2], tensegrity_bars_publisher, "world", 0);
+
+    std::array<std::vector<Eigen::Vector3d>, 3> pts;
+    pts[0].push_back(poses[0] * offset);
+    pts[0].push_back(poses[0] * (Roffset * offset));
+    pts[1].push_back(poses[1] * offset);
+    pts[1].push_back(poses[1] * (Roffset * offset));
+    pts[2].push_back(poses[2] * offset);
+    pts[2].push_back(poses[2] * (Roffset * offset));
+    publish_endcaps(pts);
   }
 };
 

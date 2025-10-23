@@ -7,3 +7,4 @@ uint8[] ids
 
 std_msgs/MultiArrayDimension[] covDim
 float64[] covariances
+float64[] scores

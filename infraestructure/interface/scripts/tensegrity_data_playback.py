@@ -73,9 +73,11 @@ class TensegrityDataPublisher(object):
             self.red_endcaps = TensegrityEndcaps();
             self.green_endcaps = TensegrityEndcaps();
             self.blue_endcaps = TensegrityEndcaps();
+            self.all_endcaps = TensegrityEndcaps();
             self.red_endcaps_pub = rospy.Publisher(red_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
             self.green_endcaps_pub = rospy.Publisher(green_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
             self.blue_endcaps_pub = rospy.Publisher(blue_endcaps_topic, TensegrityEndcaps, queue_size=1, latch=True)
+            self.all_endcaps_pub = rospy.Publisher("/tensegrity/endcaps/gt", TensegrityEndcaps, queue_size=1, latch=True)
             # self.c_T_m = np.array([[-0.72231893, -0.69031471, 0.04148439, -0.0911841 ], [-0.03982037, -0.01837056, -0.99903797, 2.43988996], [ 0.6904127, -0.72327596, -0.01421918, 0.18661254], [ 0.,     0.,     0.,     1.    ]])
             # self.c_T_m[0:3,0:3] = self.c_T_m[0:3,0:3].T
             # self.c_T_m[0:3,3] = -self.c_T_m[0:3,0:3] @ self.c_T_m[0:3,3]
@@ -93,7 +95,7 @@ class TensegrityDataPublisher(object):
             self.read_npy(self.directory + "/poses-proposed/")
 
 
-
+        self.stamp = rospy.Time.now()
         self.node_status.status = NodeStatus.READY
 
     def read_npy(self, data_dir):
@@ -109,10 +111,12 @@ class TensegrityDataPublisher(object):
         # msg = TensegrityBars()
         msg = TensegrityEndcaps();
 
-        msg.header.stamp = rospy.Time.now()
+        msg.header.seq = self.idx;
+        msg.header.stamp = self.stamp # self.stamp 
         msg.header.frame_id = "real_sense"
 
         # print(f'msg {msg}')
+        ids = []
         for i in range(6):
             pt = self.endcap_proposed[i][self.idx]
             ptm = geometry_msgs.msg.Point()
@@ -120,8 +124,8 @@ class TensegrityDataPublisher(object):
             ptm.y = pt[1]
             ptm.z = pt[2]
             msg.endcaps.append(ptm)
-            # msg.ids.append(i)
-            
+            ids.append(i)
+        msg.ids = ids;
         # xred =  self.red_proposed[self.idx];
         # qred = tr.quaternion_from_matrix(xred)
         # xblue =  self.blue_proposed[self.idx];
@@ -277,7 +281,7 @@ class TensegrityDataPublisher(object):
             rospy.logwarn("Format not supported. Choose 'color' or 'gray'")
             exit(-1)
 
-        img_msg.header.stamp = rospy.Time.now()
+        img_msg.header.stamp = self.stamp 
         img_msg.header.frame_id = "real_sense"
         img_msg.header.seq = self.idx;
             
@@ -301,7 +305,7 @@ class TensegrityDataPublisher(object):
             self.cable_lengths.append(cable_length)
 
         msg = cable_length['msg']
-        msg.header.stamp = rospy.Time.now()
+        msg.header.stamp = self.stamp 
         msg.header.seq = self.idx;
         return msg;
 
@@ -326,13 +330,14 @@ class TensegrityDataPublisher(object):
         data = self.cable_lengths[0]
 
         t = geometry_msgs.msg.TransformStamped()
-        t.header.stamp = rospy.Time.now()
+        t.header.stamp = self.stamp 
         t.header.frame_id = "mocaps"
 
         if self.red_endcaps is not None: 
             self.red_endcaps.endcaps = []
             self.green_endcaps.endcaps = []
             self.blue_endcaps.endcaps = []
+            self.all_endcaps.endcaps = []
             # print(data["mocap"][0])
             self.red_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][0]))
             self.red_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][1]))
@@ -341,12 +346,23 @@ class TensegrityDataPublisher(object):
             self.blue_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][4]))
             self.blue_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][5]))
 
+            self.all_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][0]))
+            self.all_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][1]))
+            self.all_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][2]))
+            self.all_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][3]))
+            self.all_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][4]))
+            self.all_endcaps.endcaps.append(self.mocap_to_point_msg(data["mocap"][5]))
+            self.all_endcaps.ids = [0, 1, 2, 3, 4, 5]
+
             self.red_endcaps.header.seq = self.idx
             self.green_endcaps.header.seq = self.idx
             self.blue_endcaps.header.seq = self.idx
-            self.red_endcaps.header.stamp = rospy.Time.now()
-            self.green_endcaps.header.stamp = rospy.Time.now()
-            self.blue_endcaps.header.stamp = rospy.Time.now()
+            self.all_endcaps.header.seq = self.idx
+
+            self.red_endcaps.header.stamp = self.stamp 
+            self.green_endcaps.header.stamp = self.stamp 
+            self.blue_endcaps.header.stamp = self.stamp 
+            self.all_endcaps.header.stamp = self.stamp 
 
         for idx in range(len(data["mocap"])):
             value = data["mocap"][idx]
@@ -393,6 +409,8 @@ class TensegrityDataPublisher(object):
         prev = rospy.Time.now();
         dt = 0
         while not rospy.is_shutdown():
+            self.stamp = rospy.Time.now()
+
             if self.node_status.status != NodeStatus.RUNNING:
                 # print(f"NOT RUNNING")
                 if self.node_status.status == NodeStatus.READY:
@@ -416,7 +434,8 @@ class TensegrityDataPublisher(object):
 
             prev = rospy.Time.now();
 
-            self.send_mocap_tf()
+            if self.publish_mocaps:
+                self.send_mocap_tf()
             if self.output_to_file:
                 self.add_to_file();
 
@@ -426,15 +445,20 @@ class TensegrityDataPublisher(object):
             cable_length_msg = self.get_sensors_msg()
 
 
-            self.rgb_image_pub.publish(rgb_msg)
-            self.depth_image_pub.publish(depth_msg)
+            if rgb_msg != None:
+                self.rgb_image_pub.publish(rgb_msg)
+            if depth_msg != None:
+                self.depth_image_pub.publish(depth_msg)
+
             self.sensor_length_pub.publish(cable_length_msg)
 
 
             if self.publish_mocaps:
+                # self.send_mocap_tf()
                 self.red_endcaps_pub.publish(self.red_endcaps)
                 self.green_endcaps_pub.publish(self.green_endcaps)
                 self.blue_endcaps_pub.publish(self.blue_endcaps)
+                self.all_endcaps_pub.publish(self.all_endcaps);
             if self.publish_npy_poses:
                 self.publish_npy()
 

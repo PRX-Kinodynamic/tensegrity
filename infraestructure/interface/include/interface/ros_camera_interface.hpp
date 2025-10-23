@@ -2,6 +2,8 @@
 
 // Ros
 #include <ros/ros.h>
+#include <gtsam/geometry/PinholeCamera.h>
+#include <gtsam/geometry/Cal3_S2.h>
 
 #include <interface/NodeStatus.h>
 #include <tensegrity_utils/assert.hpp>
@@ -36,6 +38,7 @@ class ros_camera_interface_t
 public:
   ros_camera_interface_t(ros::NodeHandle& nh) : _tf_listener(_tf_buffer)
   {
+    DEBUG_PRINT
     std::string camera_info_topic;
     std::string& camera_frame{ _camera_frame };
     std::string& world_frame{ _world_frame };
@@ -45,6 +48,8 @@ public:
     PARAM_SETUP(nh, camera_info_topic);
 
     _camera_info_subscriber = nh.subscribe(camera_info_topic, 1, &This::camera_info_callback, this);
+    DEBUG_PRINT
+    DEBUG_VARS(camera_info_topic);
   }
 
   bool valid()
@@ -92,8 +97,10 @@ private:
 
   void camera_info_callback(const sensor_msgs::CameraInfoConstPtr msg)
   {
+    DEBUG_PRINT
     if (not _intrinsic_received)
     {
+      DEBUG_PRINT
       const double fx{ msg->K[0] };
       const double cx{ msg->K[2] };
       const double fy{ msg->K[4] };
@@ -107,6 +114,7 @@ private:
         ros::Duration(1.0).sleep();
       }
       _camera = std::make_shared<Camera>(_extrinsic, _camera_calibration);
+      DEBUG_PRINT
     }
   }
 };

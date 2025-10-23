@@ -11,22 +11,21 @@
     <arg name="publish_npy_poses" default="false"/>
     <arg name="autostart" default="false"/>
     <arg name="points_valid_rate" default="1.0"/>
+    <arg name="publish_mocaps" default="true"/>
+    <arg name="initial_poses_params" value="[/initial/bar/0,/initial/bar/1,/initial/bar/2]"/>
+    <arg name="initial_endcaps_params" value="[/initial/endcaps/0,/initial/endcaps/1,/initial/endcaps/2,/initial/endcaps/3,/initial/endcaps/4,/initial/endcaps/5]"/>
 
 	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
         <arg name="img_directory" default="$(arg img_directory)"/>
         <arg name="loop" default="false"/>
-        <arg name="sim_clock" default="false"/>
+        <arg name="sim_clock" default="true"/>
         <arg name="max_images" default="1"/>
         <arg name="output_dir" default="$(arg output_dir)"/>
         <arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>
         <arg name="output_to_file" default="true"/>
         <arg name="publish_npy_poses" default="$(arg publish_npy_poses)"/>
+        <arg name="publish_mocaps" default="$(arg publish_mocaps)"/>
     </include>
-<!-- 
-    <include file="$(find estimation)/launch/snapshot_estimation.launch">
-        <arg name="filename" default="$(arg output_dir)/$(arg filename_prefix)_gt_poses.txt"/>
-        <arg name="autostart" default="$(arg autostart)"/>
-    </include> -->
 
 	<node pkg="perception" type="pointcloud_from_imgs" name="pointcloud_from_imgs" required="true" output="screen">
         <param name="node_id" value="/nodes/pointcloud"/>
@@ -36,15 +35,45 @@
         <param name="camera_frame" value="real_sense"/>
         <param name="world_frame" value="world"/>
         <param name="camera_info_topic" value="/real_sense/info"/>
+        <param name="initial_states_file" value=""/>
         <param name="visualize" value="true"/>
         <param name="initial_states_file" value="$(arg img_directory)/initial_estimate.txt"/>
-        <param name="tensegrity_pose_topic" value="/tensegrity/pose/current"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/pc"/>
         <param name="points_valid_rate" value="$(arg points_valid_rate)"/>
         <param name="tensegrity_endcaps_topic" value="/tensegrity/endcaps"/>
 
     </node>
 
-    <node pkg="nodelet" type="nodelet" name="pointcloud_data_nodelet"  args="manager" output="screen"/>
+    <node pkg="estimation" type="traj_estimation_windowed" name="traj_estimation_windowed" required="true" output="screen">
+        <param name="node_id" value="/nodes/traj_estimation"/>
+        <param name="visualize" value="true"/>
+        <param name="tensegrity_endcaps_topic" value="/tensegrity/endcaps"/>
+        <param name="frequency" value="10"/>
+        <param name="window_dt" value="0.1"/>
+        <param name="window_size" value="10"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/current"/>
+        <!-- <param name="initial_poses_params" type="yaml" value="$(arg initial_poses_params)"/> -->
+        <param name="initial_endcaps_params" type="yaml" value="$(arg initial_endcaps_params)"/>
+        <param name="cable_map_filename" value="$(arg img_directory)/cable_map.txt"/>
+        <param name="sensors_topicname" value="/tensegrity/sensors"/>
+        <param name="cable_unit_conversion" value="0.001"/>
+
+    </node>
+
+    <node pkg="perception" type="tensegrity_initializer" name="tensegrity_initializer" output="screen">
+        <param name="node_id" value="/nodes/initializer"/>
+        <param name="type" value="file"/>
+        <param name="camera_frame" value="real_sense"/>
+        <param name="world_frame" value="world"/>
+        <param name="camera_info_topic" value="/real_sense/info"/>
+        <param name="initial_poses_params" type="yaml" value="$(arg initial_poses_params)"/>
+        <param name="initial_filename" value="$(arg img_directory)/initial_estimate.txt"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/initial"/>
+        <param name="initial_endcaps_params" type="yaml" value="$(arg initial_endcaps_params)"/>
+
+    </node>
+
+<!--     <node pkg="nodelet" type="nodelet" name="pointcloud_data_nodelet"  args="manager" output="screen"/>
     
     <node pkg="nodelet" type="nodelet" name="EndcapsMsgToFile" 
         args="load interface/TensegrityEndcapsMsgToFile pointcloud_data_nodelet" output="screen">
@@ -58,7 +87,7 @@
         <param name="endcap_filename" value="$(arg output_dir)/$(arg filename_prefix)_gt_endcaps.txt"/>
         <param name="tensegrity_endcaps_topicname" value="/tensegrity/endcaps/gt"/>
         <param name="node_id" value="/nodes/EndcapsMsgToFileGT"/>
-    </node>
+    </node> -->
 
     <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="pointcloud_viz_nodelet"  args="manager" output="screen"/>
   
@@ -68,6 +97,14 @@
         <param name="tensegrity_markers_topicname" value="/tensegrity/pose/current/markers"/>
         <param name="node_id" value="/nodes/bars_estimation"/>
     </node>
+
+<!--     <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="multi_bars_estimation" 
+        args="load interface/TensegrityBarsArrayToMarkers pointcloud_viz_nodelet" output="screen">
+        <param name="tensegrity_bars_topicname" value="/tensegrity/pose/multi"/>
+        <param name="tensegrity_markers_topicname" value="/tensegrity/pose/multi/markers"/>
+        <param name="node_id" value="/nodes/multi_bars_estimation"/>
+        <param name="use_mesh" value="false"/>
+    </node> -->
 <!-- 
 	<node pkg="nodelet" type="nodelet" name="data_collection_nodelet"  args="manager" output="screen"/>
 

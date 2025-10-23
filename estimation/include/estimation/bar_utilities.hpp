@@ -14,7 +14,7 @@ enum RodColors
   BLUE
 };
 using ColorMapping = std::vector<std::pair<RodColors, RodColors>>;
-using ColorMappingNum = std::vector<std::pair<int, int>>;
+using ColorMappingNum = std::array<std::pair<int, int>, 9>;
 
 std::string color_str(const RodColors rod)
 {
@@ -32,6 +32,26 @@ std::string color_str(const RodColors rod)
       break;
     default:
       color = "NA";
+  }
+  return color;
+}
+
+RodColors color_from_int(const int id)
+{
+  RodColors color;
+  switch (id)
+  {
+    case 0:
+      color = RED;
+      break;
+    case 1:
+      color = GREEN;
+      break;
+    case 2:
+      color = BLUE;
+      break;
+    default:
+      TENSEGRITY_THROW("Wrong number for initializing RodColors");
   }
   return color;
 }
@@ -82,7 +102,8 @@ ColorMappingNum create_cable_map_fix_endcaps(const std::string filename)
     const int color_a{ tensegrity::utils::convert_to<int>(line[0]) };
     const int color_b{ tensegrity::utils::convert_to<int>(line[1]) };
 
-    map.push_back({ color_a, color_b });
+    map[i] = { color_a, color_b };
+    // map.push_back({ color_a, color_b });
   }
   return map;
 }
@@ -117,15 +138,36 @@ gtsam::Key rod_symbol(const RodColors rod, const int t, const int i = 0)
 {
   return factor_graphs::symbol_factory_t::create_hashed_symbol("X^{", color_str(rod), "}_{", t, ",", i, "}");
 }
+gtsam::Key rod_symbol(const int rod, const int t, const int i = 0)
+{
+  return rod_symbol(color_from_int(rod), t, i);
+}
 
 gtsam::Key rotation_symbol(const RodColors rod, const int t, const int i = 0)
 {
   return factor_graphs::symbol_factory_t::create_hashed_symbol("R^{", color_str(rod), "}_{", t, ",", i, "}");
 }
+gtsam::Key rotation_symbol(const int rod, const int t, const int i = 0)
+{
+  return rotation_symbol(color_from_int(rod), t, i);
+}
 
 gtsam::Key rodvel_symbol(const RodColors rod, const int t)
 {
   return factor_graphs::symbol_factory_t::create_hashed_symbol("\\dot{X}^{", color_str(rod), "}_{", t, "}");
+}
+gtsam::Key rodvel_symbol(const int rod, const int t)
+{
+  return rodvel_symbol(color_from_int(rod), t);
+}
+
+gtsam::Key endcap_symbol(const RodColors rod, const int t, const int i = 0)
+{
+  return factor_graphs::symbol_factory_t::create_hashed_symbol("Endcap^{", color_str(rod), "}_{", t, ",", i, "}");
+}
+gtsam::Key endcap_symbol(const int rod, const int t, const int i)
+{
+  return endcap_symbol(color_from_int(rod), t, i);
 }
 
 // Add to values only if it is not there yet
@@ -464,6 +506,147 @@ void add_cable_meassurements(observation_update_t& observation_update, const Eig
   // graph.emplace_shared<ChiralityFactor>(key_Xb, key_Xr, key_Xg, offset, Roffset, chirality_noise);
   // graph.emplace_shared<ChiralityFactor>(key_Xg, key_Xb, key_Xr, offset, Roffset, chirality_noise);
   // graph.emplace_shared<ChiralityFactor>(key_Xr, key_Xg, key_Xb, offset, Roffset, chirality_noise);
+}
+
+struct tensegrity_graph_inputs_t
+{
+  using SE3 = gtsam::Pose3;
+  using OptSE3 = std::optional<SE3>;
+
+  using Endcap = Eigen::Vector3d;
+  using OptEndcap = std::optional<Endcap>;
+
+  void reset()
+  {
+    endcaps = { std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt };
+    init_poses = { std::nullopt, std::nullopt, std::nullopt };
+    noise_models = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+    cable_noise = nullptr;
+  }
+
+  int idx_major;
+  bool add_cable_meassurements;
+  // int idx_minor;
+
+  Eigen::Vector3d offset;
+  gtsam::Rot3 Roffset;
+
+  std::array<OptEndcap, 6> endcaps;
+
+  std::array<OptSE3, 3> init_poses;
+
+  std::array<gtsam::noiseModel::Base::shared_ptr, 6> noise_models;
+
+  // Cable vars
+  Eigen::Vector<double, 9> cables;
+  std::array<std::pair<int, int>, 9> cable_map;
+  gtsam::noiseModel::Base::shared_ptr cable_noise;
+};
+
+struct tensegrity_graph_output_t
+{
+  std::array<gtsam::Key, 3> keys_pose;
+  std::array<gtsam::Key, 3> keys_rotA;
+  std::array<gtsam::Key, 3> keys_rotB;
+
+  gtsam::Values values;
+  gtsam::NonlinearFactorGraph graph;
+};
+
+tensegrity_graph_output_t create_tensegrity_graph(const tensegrity_graph_inputs_t& input)
+{
+  using CablesFactor = estimation::cable_length_factor_t;
+  using EndcapObservationFactor = estimation::endcap_observation_factor_t;
+  using RotationOffsetFactor = estimation::endcap_rotation_offset_factor_t;
+  using RotationFixIdentity = estimation::rotation_fix_identity_t;
+
+  tensegrity_graph_output_t output;
+
+  gtsam::Values& values{ output.values };
+  gtsam::NonlinearFactorGraph& graph{ output.graph };
+
+  const Eigen::Vector3d& offset{ input.offset };
+  const gtsam::Rot3& Roffset{ input.Roffset };
+
+  const gtsam::noiseModel::Base::shared_ptr rot_prior_nm{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-4) };
+  for (int i = 0; i < 3; ++i)
+  {
+    output.keys_pose[i] = estimation::rod_symbol(i, input.idx_major);
+    output.keys_rotA[i] = estimation::rotation_symbol(i, input.idx_major, 0);
+    output.keys_rotB[i] = estimation::rotation_symbol(i, input.idx_major, 1);
+
+    const gtsam::Pose3 init_pose{ input.init_poses[i] ? *(input.init_poses[i]) : gtsam::Pose3() };
+    estimation::add_to_values(values, output.keys_pose[i], init_pose);
+    estimation::add_to_values(values, output.keys_rotA[i], gtsam::Rot3());
+    estimation::add_to_values(values, output.keys_rotB[i], Roffset.inverse());
+
+    if (input.endcaps[2 * i])
+    {
+      const Eigen::Vector3d& ei{ *(input.endcaps[2 * i]) };
+      const gtsam::noiseModel::Base::shared_ptr z_noise{ input.noise_models[2 * i] };
+      graph.emplace_shared<EndcapObservationFactor>(output.keys_pose[i], output.keys_rotA[i], ei, offset, z_noise);
+    }
+    if (input.endcaps[2 * i + 1])
+    {
+      const Eigen::Vector3d& ei{ *(input.endcaps[2 * i + 1]) };
+      const gtsam::noiseModel::Base::shared_ptr z_noise{ input.noise_models[2 * i + 1] };
+      graph.emplace_shared<EndcapObservationFactor>(output.keys_pose[i], output.keys_rotB[i], ei, offset, z_noise);
+    }
+
+    graph.emplace_shared<RotationOffsetFactor>(output.keys_rotA[i], output.keys_rotB[i], Roffset, rot_prior_nm);
+    graph.emplace_shared<RotationOffsetFactor>(output.keys_rotB[i], output.keys_rotA[i], Roffset, rot_prior_nm);
+
+    graph.emplace_shared<RotationFixIdentity>(output.keys_rotA[i], output.keys_rotB[i], Roffset, rot_prior_nm);
+  }
+
+  if (input.add_cable_meassurements)
+  {
+    const Eigen::Vector<double, 9>& zi{ input.cables };
+
+    const gtsam::noiseModel::Base::shared_ptr cable_noise{ input.cable_noise };
+    int i = 0;
+    for (; i < 3; ++i)
+    {
+      const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
+      const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
+      const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 0) };
+      const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 0) };
+
+      graph.emplace_shared<CablesFactor>(key_Xi, key_Xj, key_Ri, key_Rj, zi[i], offset, cable_noise);
+    }
+    for (; i < 6; ++i)
+    {
+      const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
+      const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
+      const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 1) };
+      const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 1) };
+
+      graph.emplace_shared<CablesFactor>(key_Xi, key_Xj, key_Ri, key_Rj, zi[i], offset, cable_noise);
+    }
+    for (; i < 9; ++i)
+    {
+      const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
+      const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
+      const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 0) };
+      const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 1) };
+
+      graph.emplace_shared<CablesFactor>(key_Xi, key_Xj, key_Ri, key_Rj, zi[i], offset, cable_noise);
+    }
+
+    // for (auto color : { RodColors::RED, RodColors::GREEN, RodColors::BLUE })
+    // {
+    //   const gtsam::Key key_Ri{ rotation_symbol(color, idx, 0) };
+    //   const gtsam::Key key_Rj{ rotation_symbol(color, idx, 1) };
+
+    //   add_to_values(values, key_Ri, gtsam::Rot3());
+    //   add_to_values(values, key_Rj, Roffset);
+    //   graph.emplace_shared<RotationOffsetFactor>(key_Ri, key_Rj, Roffset, rot_prior_nm);
+    //   graph.emplace_shared<RotationOffsetFactor>(key_Rj, key_Ri, Roffset, rot_prior_nm);
+
+    //   graph.emplace_shared<RotationFixIdentity>(key_Ri, key_Rj, Roffset, rot_prior_nm);
+    // }
+  }
+  return output;
 }
 
 }  // namespace estimation
