@@ -10,6 +10,7 @@
     <arg name="filename_prefix" default="test"/>
     <arg name="output_to_file" default="false"/>
     <arg name="publish_npy_poses" default="false"/>
+    <arg name="publish_mocaps" default="true"/>
 
 
     <param name="/use_sim_time" value="$(arg sim_clock)" />
@@ -28,7 +29,7 @@
         <param name="red_endcaps_topic" value="/gt/red/endcaps" />
         <param name="green_endcaps_topic" value="/gt/green/endcaps" />
         <param name="blue_endcaps_topic" value="/gt/blue/endcaps" />
-        <param name="publish_mocaps" value="true"/>
+        <param name="publish_mocaps" value="$(arg publish_mocaps)"/>
         <param name="publish_npy_poses" value="$(arg publish_npy_poses)"/>
     </node>
 

@@ -77,7 +77,7 @@ public:
 private:
   static inline std::unordered_map<gtsam::Key, std::string> symbols_map;
 
-  symbol_factory_t(){};
+  symbol_factory_t() {};
 };
 
 }  // namespace factor_graphs
@@ -87,6 +87,16 @@ private:
     const std::vector<gtsam::Key> _keys{ __VA_ARGS__ };                                                                \
     std::vector<std::string> keys;                                                                                     \
     for (auto _key : _keys)                                                                                            \
+    {                                                                                                                  \
+      keys.push_back(SF::formatter(_key));                                                                             \
+    }                                                                                                                  \
+    DEBUG_VARS(keys)                                                                                                   \
+  };
+
+#define PRINT_KEY_CONTAINER(KEYS)                                                                                      \
+  {                                                                                                                    \
+    std::vector<std::string> keys;                                                                                     \
+    for (auto _key : KEYS)                                                                                             \
     {                                                                                                                  \
       keys.push_back(SF::formatter(_key));                                                                             \
     }                                                                                                                  \

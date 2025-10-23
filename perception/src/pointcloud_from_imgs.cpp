@@ -48,6 +48,7 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <interface/ros_camera_interface.hpp>
+#include <tensegrity_utils/time_meassurement.hpp>
 
 #include <dynamic_reconfigure/server.h>
 #include <perception/TensegrityInitializationConfig.h>
@@ -60,15 +61,6 @@ using TranslationColor = Eigen::Vector<double, 6>;
 // using Camera = gtsam::PinholeCamera<gtsam::Cal3_S2>;
 // using CameraPtr = std::shared_ptr<Camera>;
 
-// struct Metric
-// {
-//   double operator()(const TranslationColor& a, const TranslationColor& b) const
-//   {
-//     const double err{ (a.head(2) - b.head(2)).norm() };
-//     const double color_err{ (a.tail(3) - b.tail(3)).norm() < 0.1 ? 1.0 : 3.0 };
-//     return err * color_err;
-//   }
-// };
 using Metric = utils::eucledian_metric_t<Pixel>;
 using Gnn = utils::graph_nearest_neighbors_t<Pixel, Metric>;
 using NodePtr = Gnn::NodePtr;
@@ -82,6 +74,8 @@ const Color blue(0.0, 0.0, 1.0);
 const Color green(0.0, 1.0, 0.0);
 const Color red(1.0, 0.0, 0.0);
 const Pixel px_offset({ 0.325 / 2.0, 0.0 });
+
+const std::vector<double> xi_vals({ 3.841, 5.991, 7.815, 9.488, 11.070, 12.592, 14.067, 15.507 });
 
 void publish_img(cv::Mat& img, ros::Publisher& pub, std::string encoding)
 {
@@ -101,6 +95,60 @@ cv::Mat transform_image(gtsam::Pose2& tf, ros::Publisher& pub, cv::Mat& img, cv:
   publish_img(img_tf, pub, "mono8");
   return img_tf;
 }
+
+class line_pt_icp_factor_t : public gtsam::NoiseModelFactorN<gtsam::Pose3>
+{
+public:
+  using Base = gtsam::NoiseModelFactorN<gtsam::Pose3>;
+  using NoiseModel = gtsam::noiseModel::Base::shared_ptr;
+  using Pixel = Eigen::Vector2d;
+  using Translation = Eigen::Vector3d;
+
+  // Y = a + Xb
+  line_pt_icp_factor_t(const gtsam::Key kx, const Translation pt,  // no-lint
+                       const NoiseModel& cost_model = nullptr)
+    : Base(cost_model, kx), _pt(pt)
+  {
+  }
+  // virtual bool active(const gtsam::Values& values) const override
+  // {
+  //   if (_gnn_avg)
+  //   {
+  //     return _gnn_distance < (*_gnn_avg);
+  //   }
+  //   return true;
+  // }
+
+  virtual Eigen::VectorXd evaluateError(const gtsam::Pose3& x,
+                                        boost::optional<Eigen::MatrixXd&> Hx = boost::none) const override
+  {
+    Eigen::Matrix<double, 3, 6> pt3_H_x, xt3_H_x;
+    const Translation pt3{ x.transformTo(_pt, pt3_H_x) };
+
+    // const Eigen::Vector2d diff{ ptl.head(2) - x.translation().head(2) };
+    // const Translation& xt3{ x.translation(xt3_H_x) };
+
+    Eigen::Matrix<double, 1, 2> d_H_xt2, d_H_pt2;
+    const double dist{ gtsam::norm2(pt3.head(2), d_H_pt2) };
+    // const double dist{ gtsam::distance2(xt3.head(2), pt3.head(2), d_H_xt2, d_H_pt2) };
+    // x.print("x");
+    // DEBUG_VARS(pt3.transpose(), _pt.transpose(), dist);
+    if (dist < 1e-3)
+    {
+      DEBUG_VARS(dist, d_H_pt2)
+    }
+    if (Hx)
+    {
+      Eigen::Matrix<double, 2, 3> pt2_H_pt3{ Eigen::Matrix<double, 2, 3>::Identity() };
+      // pt2_H_pt3 << 1, 0, 0, 0, 1, 0;
+      *Hx = d_H_pt2 * pt2_H_pt3 * pt3_H_x;  //+ d_H_xt2 * pt2_H_pt3 * xt3_H_x;
+    }
+    return Eigen::Vector<double, 1>(dist);
+  }
+
+private:
+  const Translation _pt;
+};
 
 struct pointcloud_from_imgs_t
 {
@@ -141,7 +189,7 @@ struct pointcloud_from_imgs_t
   ros::Publisher pub_green_marker;
   ros::Publisher pub_blue_marker;
   ros::Publisher pub_img_red_marker;
-  ros::Publisher pub_red_matches, points_marker_pub;
+  ros::Publisher pub_red_matches, points_marker_pub, icp_points_pub;
   ros::Publisher pub_green_matches, pub_weights, pub_elipses, pub_est_bars;
   ros::Publisher pub_blue_matches, pub_img_marker, pub_lines;
   ros::Publisher pub_sobel_x, pub_sobel_all;
@@ -160,7 +208,7 @@ struct pointcloud_from_imgs_t
   int total_sample_bars;
   const std::array<Color, 3> colors;
   const uint8_t red_idx, green_idx, blue_idx;
-  const std::vector<double> xi_vals;
+
   bool visualize;
   std::vector<Eigen::Vector<double, 3>> points;
   std::vector<Eigen::Vector<double, 3>> point_colors;
@@ -179,10 +227,16 @@ struct pointcloud_from_imgs_t
   CvMatPtr all_masks;
 
   std::shared_ptr<interface::node_status_t> _node_status;
-  std::string initial_states_file;
+  // std::string initial_states_file;
 
   Translation _offset;
   Rotation _Roffset;
+  ros::Publisher tensegrity_bars_publisher, tensegrity_endcaps_publisher;
+  tensegrity::utils::time_meassurement_t time_meas;
+  double points_valid_rate;
+  std::vector<std::string> initial_poses_params;
+
+  ros::Time stamp;
 
   pointcloud_from_imgs_t(ros::NodeHandle& nh)
     : max_iterations(10)
@@ -204,28 +258,32 @@ struct pointcloud_from_imgs_t
     , red_idx(0)
     , green_idx(1)
     , blue_idx(2)
-    , xi_vals({ 10.828, 13.816, 16.266, 18.467, 20.515, 22.458, 24.322, 26.124, 27.877, 29.588 })
     , visualize(false)
+    , points_valid_rate(1.0)
+    , stamp(0)
   {
-    std::string tensegrity_pose_topic;
+    std::string tensegrity_pose_topic, tensegrity_endcaps_topic;
 
     lm_params.setVerbosityLM("SILENT");
     // lm_params.setVerbosityLM("SUMMARY");
     lm_params.setMaxIterations(10);
     lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/icp/fg", lm_params);
 
-    double frequency{ 15 };
+    double frequency{ 30 };
 
+    PARAM_SETUP(nh, points_valid_rate);
     PARAM_SETUP(nh, image_topic);
     PARAM_SETUP(nh, depth_topic);
     PARAM_SETUP(nh, depth_scale);
     PARAM_SETUP(nh, visualize);
-    PARAM_SETUP(nh, initial_states_file);
+    // PARAM_SETUP(nh, initial_states_file);
+    PARAM_SETUP(nh, tensegrity_pose_topic)
+    // PARAM_SETUP(nh, initial_poses_params);
+    PARAM_SETUP(nh, tensegrity_endcaps_topic);
     PARAM_SETUP_WITH_DEFAULT(nh, frequency, frequency);
 
     _node_status = interface::node_status_t::create(nh, false);
     _camera_interface = std::make_shared<interface::ros_camera_interface_t>(nh);
-    // PARAM_SETUP(nh, tensegrity_pose_topic);
     // PARAM_SETUP(nh, use_between_factor);
     // PARAM_SETUP(nh, total_sample_bars);
     // PARAM_SETUP(nh, total_image_points);
@@ -253,7 +311,10 @@ struct pointcloud_from_imgs_t
     pub_elipses = nh.advertise<sensor_msgs::Image>("/img/ellipses", 1, true);
     pub_est_bars = nh.advertise<sensor_msgs::Image>("/img/bars/estimated", 1, true);
     points_marker_pub = nh.advertise<visualization_msgs::Marker>("/pointcloud", 1, true);
+    icp_points_pub = nh.advertise<visualization_msgs::Marker>("/pointcloud/icp", 1, true);
     clustered_black = nh.advertise<visualization_msgs::MarkerArray>("/bars/clustered", 1, true);
+    tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
+    tensegrity_endcaps_publisher = nh.advertise<interface::TensegrityEndcaps>(tensegrity_endcaps_topic, 1, true);
     // pts_covs_markers_red_pub = nh.advertise<visualization_msgs::MarkerArray>("/endcaps/estimated/red", 1, true);
     // points_marker_pub = nh.advertise<visualization_msgs::Marker>("/pointcloud", 1, true);
     for (int i = 0; i < 3; ++i)
@@ -281,26 +342,50 @@ struct pointcloud_from_imgs_t
     const ros::Duration timer(1.0 / frequency);
     _timer = nh.createTimer(timer, &This::timer_callback, this);
 
-    const bool initialized{ init_from_file(initial_states_file) };
+    // const bool initialized{ init_from_file(initial_states_file) };
 
-    if (initialized)
-    {
-      _node_status->status(interface::NodeStatus::READY);
-    }
-    else
-    {
-      PRINT_MSG("Running Manual initialization");
-      for (int i = 0; i < 6; ++i)
-      {
-        ros::NodeHandle nh_i("/endcaps/init/" + std::to_string(i));
+    // if (initialized)
+    // {
+    _node_status->status(interface::NodeStatus::READY);
+    // }
+    // else
+    // {
+    //   PRINT_MSG("Running Manual initialization");
+    //   for (int i = 0; i < 6; ++i)
+    //   {
+    //     ros::NodeHandle nh_i("/endcaps/init/" + std::to_string(i));
 
-        _save_inits[i] = false;
-        _servers[i] = std::make_shared<DynReconfServer>(nh_i);
-        // f = boost::bind(&Derived::cfg_callback, this, _1, _2);
-        _servers[i]->setCallback(boost::bind(&This::cfg_callback, this, _1, _2, i));
-      }
-    }
+    //     _save_inits[i] = false;
+    //     _servers[i] = std::make_shared<DynReconfServer>(nh_i);
+    //     // f = boost::bind(&Derived::cfg_callback, this, _1, _2);
+    //     _servers[i]->setCallback(boost::bind(&This::cfg_callback, this, _1, _2, i));
+    //   }
+    // }
   }
+
+  void init_poses()
+  {
+    // bool all_poses_received{ true };
+    // for (int i = 0; i < initial_poses_params.size(); ++i)
+    // {
+    //   // Assuming pose = (quat, pos)
+    //   std::vector<double> params_in;
+    //   all_poses_received &= tensegrity::utils::param_check_then_get(initial_poses_params[i], params_in);
+    //   // DEBUG_VARS(i, all_poses_received)
+    //   if (all_poses_received)
+    //   {
+    //     gtsam::Rot3 quat(params_in[0], params_in[1], params_in[2], params_in[3]);
+    //     Eigen::Vector3d position(params_in[4], params_in[5], params_in[6]);
+    //     poses[i] = gtsam::Pose3(quat, position);
+    //   }
+    // }
+
+    // if (all_poses_received)
+    // {
+    //   _node_status->status(interface::NodeStatus::READY);
+    // }
+  }
+
   void cfg_callback(perception::TensegrityInitializationConfig& config, uint32_t level, int endcap)
   {
     if (_camera_interface->valid())
@@ -321,17 +406,19 @@ struct pointcloud_from_imgs_t
   {
     if (_node_status->status() == interface::NodeStatus::PREPARING)
     {
-      manual_initialization();
+      // manual_initialization();
     }
     else if (_node_status->status() == interface::NodeStatus::RUNNING and rgb_received and depth_received)
     {
       // PRINT_MSG("Running icp");
       const auto start{ std::chrono::steady_clock::now() };
       run_icp();
+
       const auto finish{ std::chrono::steady_clock::now() };
       const std::chrono::duration<double> elapsed{ finish - start };
       const double iteration_dt{ elapsed.count() };
-      DEBUG_VARS(iteration_dt);
+
+      // DEBUG_VARS(iteration_dt);
       // DEBUG_VARS(iter_dt)
       rgb_received = false;
       depth_received = false;
@@ -347,27 +434,30 @@ struct pointcloud_from_imgs_t
     // ros::spinOnce();
   }
 
-  void manual_initialization()
-  {
-    if (rgb_received and depth_received)
-    {
-      compute_masks();
-      get_subimage(all_masks);
+  // void manual_initialization()
+  // {
+  //   if (rgb_received and depth_received)
+  //   {
+  //     compute_masks();
+  //     get_subimage(all_masks);
 
-      points_to_marker(points, point_colors, points_marker_pub);
+  //     if (visualize)
+  //     {
+  //       points_to_marker(points, point_colors, points_marker_pub);
+  //     }
 
-      bool save{ true };
-      for (int i = 0; i < 6; ++i)
-      {
-        save &= _save_inits[i];
-      }
-      if (save)
-      {
-        _node_status->status(interface::NodeStatus::READY);
-        init_to_file(initial_states_file);
-      }
-    }
-  }
+  //     bool save{ true };
+  //     for (int i = 0; i < 6; ++i)
+  //     {
+  //       save &= _save_inits[i];
+  //     }
+  //     if (save)
+  //     {
+  //       _node_status->status(interface::NodeStatus::READY);
+  //       init_to_file(initial_states_file);
+  //     }
+  //   }
+  // }
 
   void init_to_file(const std::string filename)
   {
@@ -421,6 +511,7 @@ struct pointcloud_from_imgs_t
     cv_bridge::CvImageConstPtr frame{ cv_bridge::toCvShare(message) };
     cv::cvtColor(frame->image, img_hsv, cv::COLOR_BGR2HSV);
     frame->image.copyTo(img_rgb);
+    stamp = message->header.stamp;
 
     rgb_received = true;
   }
@@ -472,8 +563,8 @@ struct pointcloud_from_imgs_t
     pub.publish(marker);
   }
 
-  void points_to_marker(std::vector<Eigen::Vector3d>& pts, std::vector<Eigen::Vector3d>& pts_colors,
-                        ros::Publisher& pub)
+  static void points_to_marker(std::vector<Eigen::Vector3d>& pts, std::vector<Eigen::Vector3d>& pts_colors,
+                               ros::Publisher& pub)
   {
     visualization_msgs::Marker marker;
     tensegrity::utils::init_header(marker.header, "world");
@@ -484,7 +575,7 @@ struct pointcloud_from_imgs_t
     marker.scale.y = 0.01;  // is point height
     // interface::copy(marker.pose, pose);
     // for (auto p : pc)
-    for (int i = 0; i < points.size(); ++i)
+    for (int i = 0; i < pts.size(); ++i)
     {
       marker.points.emplace_back();
       marker.points.back().x = pts[i][0];
@@ -538,13 +629,15 @@ struct pointcloud_from_imgs_t
       all_markers.markers.emplace_back(marker);
       // DEBUG_VARS(marker.scale.x, marker.scale.y, marker.scale.z);
     }
-    DEBUG_VARS(all_markers.markers.size());
+    // DEBUG_VARS(all_markers.markers.size());
     pub.publish(all_markers);
   }
 
   template <typename Element, typename Covs>
-  void cluster_fast(std::vector<Element>& vals_out, std::vector<Covs>& covs_out,  // no-lint
-                    const std::vector<Element>& vals_in, const std::vector<Covs>& covs_in)
+  static void cluster_fast(std::vector<Element>& vals_out, std::vector<Covs>& covs_out,
+                           std::vector<double>& clustered_out,  // no-lint
+                           const std::vector<Element>& vals_in, const std::vector<Covs>& covs_in,
+                           const std::vector<double>& clustered_in)
   {
     using GaussianNM = gtsam::noiseModel::Gaussian;
     // DEBUG_VARS(endcaps.size());
@@ -558,6 +651,7 @@ struct pointcloud_from_imgs_t
     double adjusted_error{ 0 };
     std::vector<Element> rejected;
     std::vector<Covs> rejected_covs;
+    std::vector<double> rejected_clust;
     gtsam::Key key{ gtsam::Symbol('X', 0) };
     values.insert(key, vals_in[0]);
     std::size_t clustered{ 0 };
@@ -567,49 +661,35 @@ struct pointcloud_from_imgs_t
     key_ordering += key;
 
     int dummy;
+    // int clustered_prev_tot{ 0 };
     for (int i = 0; i < vals_in.size(); ++i)
     {
-      // Linearize measurement factor and add it to the Kalman Filter graph
-      // Values linearizationPoint;
-      // values.insert(keys[0], x_);
-
-      clustered++;
+      // clustered++;
       // gtsam::NonlinearFactorGraph gDelta;
 
       const Element zi{ vals_in[i] };
-      GaussianNM::shared_ptr z_noise{ GaussianNM::Information(covs_in[i].inverse()) };
+      const GaussianNM::shared_ptr z_noise{ GaussianNM::Information(covs_in[i].inverse()) };
 
       gtsam::GaussianFactorGraph linearFactorGraph;
       linearFactorGraph.push_back(prior);
-      gtsam::PriorFactor<Element> curr_prior(key, zi, z_noise);
+      const gtsam::PriorFactor<Element> curr_prior(key, zi, z_noise);
       linearFactorGraph.push_back(curr_prior.linearize(values));
       const gtsam::GaussianConditional::shared_ptr marginal{
         linearFactorGraph.marginalMultifrontalBayesNet(key_ordering)->front()
       };
       const gtsam::VectorValues result{ marginal->solve(gtsam::VectorValues()) };
 
-      // sigma_inv = covs_in[i].second;
-
-      // solve_prior(linearFactorGraph, values, key, prior);
-      // gDelta.addPrior(key, zi, z_noise);
-      // gtsam::FactorIndices indices{ graph.add_factors(gDelta) };
-      // gtsam::Values result{ lm_helper->optimize(graph, values, true) };
-      // const double error{ graph.error(result) };
       const double error{ linearFactorGraph.error(result) };
       // adjusted_error = error;
       const double derr{ error - prev_error };
-      // DEBUG_VARS(zi.transpose(), error, prev_error, derr);
-      if (derr > xi_vals[std::min(clustered, xi_vals.size())])
+      // LOG_VARS(zi.transpose(), error, prev_error, derr, clustered);
+      // if (derr > xi_vals[std::min(clustered, xi_vals.size())])
+      // if (derr > xi_vals[2])
+      if (error > xi_vals[2])
       {
-        // for (auto idx : indices)
-        // {
-        //   graph.remove(idx);
-        // }
-        // result = lm_helper->optimize(graph, values, true);
-        // adjusted_error = graph.error(result);
         rejected.push_back(vals_in[i]);
         rejected_covs.push_back(covs_in[i]);
-        clustered--;
+        rejected_clust.push_back(clustered_in[i]);
       }
       else
       {
@@ -621,6 +701,7 @@ struct pointcloud_from_imgs_t
             marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
         // const Eigen::Matrix<double, 1, 1> scale_sigma{ scale_beliefs[i].second };
         prev_error = error;
+        clustered += clustered_in[i];
       }
       // std::cin >> dummy;
     }
@@ -629,12 +710,14 @@ struct pointcloud_from_imgs_t
     const Covs res_cov{ prior->information().inverse() };
     // const Covs res_cov{ marginals.marginalCovariance(key) };
 
+    // DEBUG_VARS(clustered)
     vals_out.push_back(res);
     covs_out.push_back(res_cov);
+    clustered_out.push_back(clustered);
+    // LOG_VARS(clustered, rejected.size());
     if (rejected.size() > 0)
     {
-      // DEBUG_VARS(rejected.size());
-      cluster_fast(vals_out, covs_out, rejected, rejected_covs);
+      cluster_fast(vals_out, covs_out, clustered_out, rejected, rejected_covs, rejected_clust);
     }
   }
 
@@ -708,37 +791,61 @@ struct pointcloud_from_imgs_t
   }
 
   template <typename Element, typename Covs>
-  void cluster_all(std::vector<Element>& vals_out, std::vector<Covs>& covs_out,  // no-lint
-                   const std::vector<Element>& vals_in, const std::vector<Covs>& covs_in, int max_steps = -1)
+  static void cluster_all(std::vector<Element>& vals_out, std::vector<Covs>& covs_out,
+                          std::vector<double>& tot_clustered,  // no-lint
+                          const std::vector<Element>& vals_in, const std::vector<Covs>& covs_in, int max_steps = -1)
   {
     std::vector<Element> v_in, v_out;
     std::vector<Covs> c_in, c_out;
-    DEBUG_VARS(max_steps);
+    std::vector<double> clust_in(vals_in.size(), 1);
+    std::vector<double> clust_out;
+
+    // LOG_VARS(max_steps);
     std::size_t prev_size{ vals_in.size() };
-    const auto start{ std::chrono::steady_clock::now() };
-    cluster_fast(v_out, c_out, vals_in, covs_in);
+    // const auto start{ std::chrono::steady_clock::now() };
+    // time_meas("cluster_fast " + std::to_string(max_steps), false);
+    cluster_fast(v_out, c_out, clust_out, vals_in, covs_in, clust_in);
+    // DEBUG_VARS(clust_out);
+    // time_meas("cluster_fast " + std::to_string(max_steps), true);
+    // LOG_VARS(v_out.size());
+    max_steps--;
     while (max_steps != 0 and prev_size > v_out.size())
     {
       v_in.clear();
       c_in.clear();
+      clust_in.clear();
       v_out.swap(v_in);
       c_out.swap(c_in);
+      clust_out.swap(clust_in);
       // DEBUG_VARS(max_steps);
-      // DEBUG_VARS(v_out.size(), v_in.size());
       prev_size = v_in.size();
       // const auto start{ std::chrono::steady_clock::now() };
-      cluster_fast(v_out, c_out, v_in, c_in);
+      // time_meas("cluster_fast " + std::to_string(max_steps), false);
+      cluster_fast(v_out, c_out, clust_out, v_in, c_in, clust_in);
+      // DEBUG_VARS(clust_out);
+      // time_meas("cluster_fast " + std::to_string(max_steps), true);
+      // DEBUG_VARS(v_out.size(), v_in.size());
       // const auto finish{ std::chrono::steady_clock::now() };
       // const std::chrono::duration<double> elapsed_seconds{ finish - start };
       // DEBUG_VARS(elapsed_seconds.count());
       max_steps--;
     }
-    const auto finish{ std::chrono::steady_clock::now() };
-    const std::chrono::duration<double> elapsed_seconds{ finish - start };
-    DEBUG_VARS(elapsed_seconds.count(), vals_in.size());
+
+    double max{ *std::max_element(clust_out.begin(), clust_out.end()) };
+
+    // DEBUG_VARS(max, clust_out)
+    auto norm = [&](double& n) { n = n / max; };
+
+    // std::cout << "before:\t";
+    std::for_each(clust_out.begin(), clust_out.end(), norm);
+
+    // DEBUG_VARS(clust_out)
+
     vals_out.swap(v_out);
     covs_out.swap(c_out);
-    DEBUG_VARS(max_steps);
+    clust_out.swap(tot_clustered);
+    // clust_out.swap(clust_in);
+    // LOG_VARS(max_steps, vals_out.size());
   }
 
   void get_subimage(CvMatPtr& all_masks)
@@ -782,8 +889,6 @@ struct pointcloud_from_imgs_t
 
     const int total_pts{ static_cast<int>(recp_width * recp_height) };
 
-    points.clear();
-    point_colors.clear();
     // points = Eigen::Matrix<double, 3, -1>::Zero(3, total_pts);
     // point_colors = Eigen::Matrix<double, 3, -1>::Zero(3, total_pts);
 
@@ -793,14 +898,23 @@ struct pointcloud_from_imgs_t
     {
       for (int j = 0; j < recp_height; ++j)
       {
+        if (factor_graphs::random_uniform() > points_valid_rate)
+          continue;
         pt = px_cp + Eigen::Vector2d(i, j);
-        if (all_masks->at<uint8_t>(pt[1], pt[0]) > 0)
+        const uint16_t depth_z{ img_depth.at<uint16_t>(pt[1], pt[0]) };
+        if (all_masks->at<uint8_t>(pt[1], pt[0]) > 0 and depth_z > 0)
         {
-          const double z{ img_depth.at<uint16_t>(pt[1], pt[0]) / depth_scale };
+          const double z{ depth_z / depth_scale };
 
           // Point3 backproject(const Point2& p, double depth,
-
-          points.push_back(_camera_interface->camera()->backproject(pt, z));
+          const Eigen::Vector3d pt3d{ _camera_interface->camera()->backproject(pt, z) };
+          points.push_back(pt3d);
+          // if (pt3d[2] > 1.1)
+          // {
+          //   // int depth = img_depth.at<uint16_t>(pt[1], pt[0]);
+          //   // DEBUG_VARS(pt[0], pt[1], z, pt3d.transpose())
+          //   DEBUG_VARS(depth_z, pt[0], pt[1], z, pt3d.transpose())
+          // }
           // points.col(idx) = Eigen::Vector3d(pt[0] * z, pt[1] * z, z);
           point_colors.push_back(Eigen::Vector3d::Zero());
           if (_frame_colors[red_idx].at<uint8_t>(pt[1], pt[0]) > 0)
@@ -829,6 +943,7 @@ struct pointcloud_from_imgs_t
     std::array<std::vector<Eigen::Matrix3d>, 3> covs_by_color;
     // std::vector<Eigen::Vector3d> pts_black;
     // std::vector<Eigen::Matrix3d> covs_black;
+    const Eigen::Matrix3d init_cov{ 1e-3 * Eigen::Matrix3d::Identity() };
     for (int i = 0; i < points.size(); ++i)
     {
       const Eigen::Vector3d& ci{ point_colors[i] };
@@ -839,23 +954,44 @@ struct pointcloud_from_imgs_t
         if (ci[j] > 0)
         {
           pts_by_color[j].push_back(points[i]);
-          covs_by_color[j].push_back(1e-3 * Eigen::Matrix3d::Identity());  // Isometric. In [mm]
+          covs_by_color[j].push_back(init_cov);  // Isotropic. In [mm]
         }
       }
       // if (ci.isZero())
       // {
       //   pts_black.push_back(points[i]);
-      //   covs_black.push_back(1e-3 * Eigen::Matrix3d::Identity());  // Isometric. In [mm]
+      //   covs_black.push_back(1e-3 * Eigen::Matrix3d::Identity());  // Isotropic. In [mm]
       // }
     }
+    // DEBUG_VARS(pts_by_color[0].size());
+    // DEBUG_VARS(pts_by_color[1].size());
+    // DEBUG_VARS(pts_by_color[2].size());
+
     std::array<std::vector<Eigen::Vector3d>, 3> vals_out;
     std::array<std::vector<Eigen::Matrix3d>, 3> covs_out;
+    std::array<std::vector<double>, 3> count_out;
     // std::vector<Eigen::Vector3d> pts_black_clustered;
     // std::vector<Eigen::Matrix3d> covs_black_clustered;
-    // const std::vector<Element>& vals_in, const std::vector<Covs>& covs_in
-    cluster_all(vals_out[0], covs_out[0], pts_by_color[0], covs_by_color[0]);
-    cluster_all(vals_out[1], covs_out[1], pts_by_color[1], covs_by_color[1]);
-    cluster_all(vals_out[2], covs_out[2], pts_by_color[2], covs_by_color[2]);
+    // LOG_VARS("0")
+    // LOG_VARS("1")
+    // cluster_all(vals_out[0], covs_out[0], pts_by_color[0], covs_by_color[0]);
+    // cluster_all(vals_out[1], covs_out[1], pts_by_color[1], covs_by_color[1]);
+    // cluster_all(vals_out[2], covs_out[2], pts_by_color[2], covs_by_color[2]);
+    // using Cluster3DPts = cluster_all<Eigen::Vector3d, Eigen::Matrix3d>;
+    std::thread ca0(cluster_all<Eigen::Vector3d, Eigen::Matrix3d>, std::ref(vals_out[0]), std::ref(covs_out[0]),
+                    std::ref(count_out[0]), std::cref(pts_by_color[0]), std::cref(covs_by_color[0]), -1);
+    std::thread ca1(cluster_all<Eigen::Vector3d, Eigen::Matrix3d>, std::ref(vals_out[1]), std::ref(covs_out[1]),
+                    std::ref(count_out[1]), std::cref(pts_by_color[1]), std::cref(covs_by_color[1]), -1);
+    std::thread ca2(cluster_all<Eigen::Vector3d, Eigen::Matrix3d>, std::ref(vals_out[2]), std::ref(covs_out[2]),
+                    std::ref(count_out[2]), std::cref(pts_by_color[2]), std::cref(covs_by_color[2]), -1);
+    ca0.join();
+    ca1.join();
+    ca2.join();
+    // DEBUG_VARS(vals_out[0].size(), vals_out[1].size(), vals_out[2].size());
+    // DEBUG_VARS(count_out[0]);
+    // DEBUG_VARS(count_out[1]);
+    // DEBUG_VARS(count_out[2]);
+    // LOG_VARS("2")
     // cluster_fast(pts_black_clustered, covs_black_clustered, pts_black, covs_black);
     // cluster(vals_out2[0], covs_out2[0], vals_out[0], covs_out[0]);
     // for (int i = 0; i < vals_out[0].size(); ++i)
@@ -870,41 +1006,79 @@ struct pointcloud_from_imgs_t
     {
       for (auto j : { red_idx, green_idx, blue_idx })
       {
+        // points_with_cov_to_marker(vals_out[j], colors[j], covs_count[j], pts_covs_markers_pub[j]);
         points_with_cov_to_marker(vals_out[j], colors[j], covs_out[j], pts_covs_markers_pub[j]);
       }
       // points_with_cov_to_marker(pts_black_clustered, black, covs_black_clustered, clustered_black);
       // points_with_cov_to_marker(vals_out[1], colors[1], covs_out[1], pts_covs_markers_pub[1]);
       // points_with_cov_to_marker(vals_out[2], colors[2], covs_out[2], pts_covs_markers_pub[2]);
     }
-    update_estimate(vals_out, covs_out);
+    // update_estimate(vals_out, covs_out);
+    // icp_graph(vals_out);
+    publish_endcaps(vals_out, count_out);
+  }
+
+  void publish_endcaps(const std::array<std::vector<Eigen::Vector3d>, 3>& pts,
+                       const std::array<std::vector<double>, 3>& count)
+  {
+    using tensegrity::utils::convert_to;
+
+    interface::TensegrityEndcaps msg;
+    tensegrity::utils::init_header(msg.header, "world");
+    msg.message = "PointcloudFromImgs";
+    msg.header.stamp = stamp;
+    // DEBUG_VARS(seq);
+    for (int idx = 0; idx < 3; ++idx)
+    {
+      for (int i = 0; i < pts[idx].size(); ++i)
+      {
+        const Eigen::Vector3d z{ pts[idx][i] };
+        msg.endcaps.push_back(convert_to<geometry_msgs::Point>(z));
+        msg.ids.push_back(idx);
+        msg.scores.push_back(count[idx][i]);
+      }
+    }
+    tensegrity_endcaps_publisher.publish(msg);
+    // const Eigen::Vector3d zB{ pts[idx][j] };
   }
 
   void update_estimate(const std::array<std::vector<Eigen::Vector3d>, 3>& pts,
                        const std::array<std::vector<Eigen::Matrix3d>, 3>& covs)
   {
+    using DiagonalNM = gtsam::noiseModel::Diagonal;
     using GaussianNM = gtsam::noiseModel::Gaussian;
-    gtsam::Key key{ gtsam::Symbol('X', 0) };
-    gtsam::Ordering key_ordering;
-    key_ordering += key;
+    // gtsam::Ordering key_ordering;
+    // key_ordering += key;
     GaussianNM::shared_ptr z0_noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-3) };
     std::array<double, 6> errors;
     std::array<Eigen::Vector3d, 6> proposed;
+
+    // gtsam::Values values;
+    const Eigen::Vector3d eps{ 1e-3 * Eigen::Vector3d::Ones() };
+    gtsam::Values values;
+    gtsam::NonlinearFactorGraph graph;
     for (int i = 0; i < 6; ++i)
     {
-      gtsam::Values values;
+      gtsam::Key key{ gtsam::Symbol('X', i) };
       const Eigen::Vector3d z0{ _last_estimate[i] };
       values.insert(key, z0);
+      DEBUG_VARS(i, z0.transpose());
       int idx{ static_cast<int>(i / 2) };
       double prev_error{ std::numeric_limits<double>::max() };
       for (int j = 0; j < pts[idx].size(); ++j)
       {
-        DEBUG_VARS(i, idx, j)
+        // DEBUG_VARS(i, idx, j)
         // const Eigen::Matrix3d& cov{ covs[idx][j] };
         // GaussianNM::shared_ptr z1_noise{ GaussianNM::Information(cov.inverse()) };
         const Eigen::Vector3d& z1{ pts[idx][j] };
-        const Eigen::Vector3d& diff{ z0 - z1 };
+        const Eigen::Vector3d diff{ z0 - z1 };
         // const Eigen::Matrix<double, 1, 3> diag{ cov.diagonal().transpose() };
-        DEBUG_VARS(z0.transpose(), z1.transpose())
+        // DEBUG_VARS(z0.transpose(), z1.transpose())
+        const Eigen::Vector3d diff_eps{ diff.cwiseAbs().cwiseMax(eps) };
+        DEBUG_VARS(j, diff_eps.transpose())
+        DiagonalNM::shared_ptr diag_nm{ DiagonalNM::Sigmas(diff_eps) };
+
+        graph.addPrior(key, z1, diag_nm);
         const double error{ z0_noise->squaredMahalanobisDistance(diff) };
         // const double error{ diff.transpose() * c * diff };
         // gtsam::GaussianFactorGraph linearFactorGraph;
@@ -919,7 +1093,7 @@ struct pointcloud_from_imgs_t
         // const double error{ linearFactorGraph.error(result) };
         if (error < prev_error)
         {
-          DEBUG_VARS(error, prev_error)
+          // DEBUG_VARS(error, prev_error)
           proposed[i] = z1;
           errors[i] = error;
           prev_error = error;
@@ -927,42 +1101,119 @@ struct pointcloud_from_imgs_t
       }
     }
 
-    // const double off_norm{ (2 * _offset).norm() };
-    // for (int i = 0; i < 6; i += 2)
-    // {
-    //   const Eigen::Vector3d z0A{ _last_estimate[i] };
-    //   const Eigen::Vector3d z0B{ _last_estimate[i + 1] };
-    //   const Eigen::Vector3d z1A{ proposed[i] };
-    //   const Eigen::Vector3d z1B{ proposed[i + 1] };
+    // const gtsam::Values result{ lm_helper->optimize(graph, values, true) };
+    // result.print("Result ");
 
-    //   const double errA{ std::fabs((z0B - z1A).norm() - off_norm) * 1000 };
-    //   const double errB{ std::fabs((z0A - z1B).norm() - off_norm) * 1000 };
-
-    //   errors[i] = errA;
-    //   errors[i + 1] = errB;
-    // }
-    // DEBUG_VARS(errors)
-    const double max_error{ 4900 };  // Accepting errors of up to 70 [mm] (70^2=4900) -> The bar's width is 35 [mm]
     for (int i = 0; i < 6; ++i)
     {
-      // _valid_estimate[i] = false;
+      gtsam::Key key{ gtsam::Symbol('X', i) };
+      _valid_estimate[i] = false;
       // if (errors[i] < max_error)
       // {
-      _valid_estimate[i] = true;
-      _last_estimate[i] = proposed[i];
+      // _valid_estimate[i] = true;
+      // _last_estimate[i] = result.at<Eigen::Vector3d>(key);
       // }
     }
   }
 
+  void icp_graph(const std::array<std::vector<Eigen::Vector3d>, 3>& pts)
+  {
+    std::vector<Eigen::Vector<double, 3>> icp_points;
+    std::vector<Eigen::Vector<double, 3>> icp_point_colors;
+
+    gtsam::Values values;
+    gtsam::NonlinearFactorGraph graph;
+    const double step{ 0.1 };
+    int tot_bars;
+    gtsam::noiseModel::Isotropic::shared_ptr zAB_noise{ gtsam::noiseModel::Isotropic::Sigma(1, 1e-3) };
+    for (int idx = 0; idx < 3; ++idx)
+    {
+      gtsam::Key key{ gtsam::Symbol('X', idx) };
+      Eigen::Vector3d avg{ Eigen::Vector3d::Zero() };
+      // int idx{ static_cast<int>(i / 2) };
+      for (int i = 0; i < pts[idx].size(); ++i)
+      {
+        const Eigen::Vector3d zA{ pts[idx][i] };
+        graph.emplace_shared<line_pt_icp_factor_t>(key, zA, zAB_noise);
+
+        avg += zA;
+        // const std::pair<Eigen::Vector2d, bool> zA_valid{ _camera_interface->camera()->projectSafe(zA) };
+        // if (not zA_valid.second or _frame_colors[idx].at<uint8_t>(zA_valid.first[1], zA_valid.first[0]) == 0)
+        // {
+        //   continue;
+        // }
+        icp_points.push_back(zA);
+        icp_point_colors.push_back(colors[idx]);
+        DEBUG_VARS(idx, i, zA.transpose())
+        for (int j = i + 1; j < pts[idx].size(); ++j)
+        {
+          const Eigen::Vector3d zB{ pts[idx][j] };
+          const Eigen::Vector3d vec{ zB - zA };
+          const std::pair<Eigen::Vector2d, bool> zB_valid{ _camera_interface->camera()->projectSafe(zA) };
+          graph.emplace_shared<line_pt_icp_factor_t>(key, zB, zAB_noise);
+          // if (not zB_valid.second or _frame_colors[idx].at<uint8_t>(zB_valid.first[1], zB_valid.first[0]) == 0)
+          // {
+          //   continue;
+          // }
+          if (vec.norm() < 0.10 or vec.head(2).norm() < 0.05)  // 10cm | 5cm
+          {
+            continue;
+          }
+          icp_points.push_back(zB);
+          icp_point_colors.push_back(colors[idx]);
+          DEBUG_VARS(idx, j, vec.norm(), zB.transpose())
+          for (double ti = 0; ti < 1; ti += step)
+          {
+            const Eigen::Vector3d zi{ zA + vec * ti };
+            const std::pair<Eigen::Vector2d, bool> pt_valid{ _camera_interface->camera()->projectSafe(zi) };
+
+            // const Eigen::Vector2d pt{ _camera_interface->camera()->project2(zi) };
+            if (pt_valid.second and _frame_black.at<uint8_t>(pt_valid.first[1], pt_valid.first[0]) > 0)
+            {
+              // DEBUG_VARS(zi.transpose())
+              gtsam::noiseModel::Isotropic::shared_ptr z_noise{ gtsam::noiseModel::Isotropic::Sigma(1, 1e-2) };
+
+              graph.emplace_shared<line_pt_icp_factor_t>(key, zi, z_noise);
+              icp_points.push_back(zi);
+              icp_point_colors.push_back(colors[idx]);
+              // icp_point_colors.push_back(Eigen::Vector3d::Zero());
+            }
+          }
+        }
+      }
+      gtsam::Pose3 xi(gtsam::Rot3(), avg / static_cast<double>(pts[idx].size()));
+      xi.print("xi");
+      values.insert(key, xi);
+    }
+
+    lm_params.setVerbosityLM("SUMMARY");
+    // lm_params.setMaxIterations(1);
+    const gtsam::Values result{ lm_helper->optimize(graph, values, true, lm_params) };
+    lm_params.setVerbosityLM("SILENT");
+    lm_params.setMaxIterations(10);
+    std::array<gtsam::Pose3, 3> poses;
+    poses[0] = result.at<gtsam::Pose3>(gtsam::Symbol('X', 0));
+    poses[1] = result.at<gtsam::Pose3>(gtsam::Symbol('X', 1));
+    poses[2] = result.at<gtsam::Pose3>(gtsam::Symbol('X', 2));
+
+    result.print("Result ");
+    points_to_marker(icp_points, icp_point_colors, icp_points_pub);
+    estimation::publish_tensegrity_msg(poses[0], poses[1], poses[2], tensegrity_bars_publisher, "world", 0);
+  }
+
   void compute_masks()
   {
+    // time_meas("inRange", false);
     cv::inRange(img_hsv, low_red, high_red, _frame_colors[red_idx]);
     cv::inRange(img_hsv, low_green, high_green, _frame_colors[green_idx]);
     cv::inRange(img_hsv, low_blue, high_blue, _frame_colors[blue_idx]);
     cv::inRange(img_hsv, low_black, high_black, _frame_black);
+    // time_meas("inRange", true);
 
+    // time_meas("adding", false);
     cv::Mat color_masks{ _frame_colors[red_idx] + _frame_colors[green_idx] + _frame_colors[blue_idx] };
     all_masks = std::make_shared<cv::Mat>(_frame_black + color_masks);
+    // time_meas("adding", true);
 
     if (visualize)
     {
@@ -978,13 +1229,24 @@ struct pointcloud_from_imgs_t
     depth_received = false;
 
     // perception::erode_or_dilate(0, *all_masks, *all_masks, "ED", elements);
+    // time_meas("compute_masks", false);
     compute_masks();
+    // time_meas("compute_masks", true);
+
+    // time_meas("get_subimage", false);
     get_subimage(all_masks);
+    // time_meas("get_subimage", true);
 
-    points_to_marker(points, point_colors, points_marker_pub);
-
+    // time_meas("process_colors", false);
     process_colors();
+    // time_meas("process_colors", true);
 
+    if (visualize)
+    {
+      points_to_marker(points, point_colors, points_marker_pub);
+    }
+    points.clear();
+    point_colors.clear();
     // cv::Mat grad_masks;
     // cv::Sobel(*all_masks, grad_masks, CV_16S, 1, 0);
     // cv::Mat abs_grad;

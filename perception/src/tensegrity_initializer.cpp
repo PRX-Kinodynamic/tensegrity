@@ -16,6 +16,7 @@
 #include <interface/node_status.hpp>
 #include <interface/TensegrityBars.h>
 #include <interface/type_conversions.hpp>
+#include <interface/ros_camera_interface.hpp>
 
 #include <interface/type_conversions.hpp>
 #include <estimation/bar_utilities.hpp>
@@ -61,9 +62,9 @@ const Color blue(1.0, 0.0, 0.0);
 const Color green(0.0, 1.0, 0.0);
 const Color red(0.0, 0.0, 1.0);
 
-struct tensegrity_3d_icp_t
+struct tensegrity_initializer_t
 {
-  using This = tensegrity_3d_icp_t;
+  using This = tensegrity_initializer_t;
   int max_iterations;
   // gtsam::Pose3 red_pose, green_pose, blue_pose;
   std::array<gtsam::Pose3, 3> poses;
@@ -95,12 +96,14 @@ struct tensegrity_3d_icp_t
   std::shared_ptr<factor_graphs::levenberg_marquardt_t> lm_helper;
   std::shared_ptr<interface::node_status_t> _node_status;
 
-  std::vector<std::string> initial_poses_params;
+  std::vector<std::string> initial_poses_params, initial_endcaps_params;
   ros::Publisher tensegrity_bars_publisher;
   std::string type;
   std::string initial_filename;
+  std::array<Eigen::Vector3d, 6> estimates;
+  std::shared_ptr<interface::ros_camera_interface_t> _camera_interface;
 
-  tensegrity_3d_icp_t(ros::NodeHandle& nh)
+  tensegrity_initializer_t(ros::NodeHandle& nh)
     : max_iterations(10)
     , low_red(160, 153, 57)
     , high_red(179, 255, 150)
@@ -123,6 +126,7 @@ struct tensegrity_3d_icp_t
     lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/icp/fg", lm_params);
 
     _node_status = interface::node_status_t::create(nh, false);
+    _camera_interface = std::make_shared<interface::ros_camera_interface_t>(nh);
 
     // PARAM_SETUP(nh, image_topic);
     // PARAM_SETUP(nh, depth_topic);
@@ -131,11 +135,12 @@ struct tensegrity_3d_icp_t
 
     PARAM_SETUP(nh, tensegrity_pose_topic);
     // PARAM_SETUP(nh, initial_file);
-    // PARAM_SETUP(nh, use_between_factor);
     PARAM_SETUP(nh, type);
     PARAM_SETUP(nh, initial_poses_params);
     PARAM_SETUP_WITH_DEFAULT(nh, initial_filename, initial_filename);
+    PARAM_SETUP_WITH_DEFAULT(nh, initial_endcaps_params, initial_endcaps_params);
 
+    DEBUG_VARS(initial_endcaps_params)
     tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
 
     // image_subscriber = nh.subscribe(image_topic, 1, &This::image_callback, this);
@@ -153,8 +158,10 @@ struct tensegrity_3d_icp_t
     if (type == "file")
     {
       const bool res{ init_from_file(initial_filename) };
+
       TENSEGRITY_ASSERT(res, "File initialization failed!");
-      send_params();
+      send_endcaps();
+      send_poses();
       _node_status->status(interface::NodeStatus::FINISH);
     }
     else
@@ -164,11 +171,29 @@ struct tensegrity_3d_icp_t
     }
   }
 
-  void send_params()
+  void send_endcaps()
+  {
+    //
+    for (int i = 0; i < initial_endcaps_params.size(); ++i)
+    {
+      std::vector<double> params_out;
+
+      params_out.push_back(estimates[i][0]);
+      params_out.push_back(estimates[i][1]);
+      params_out.push_back(estimates[i][2]);
+
+      // DEBUG_VARS(initial_endcaps_params[i], params_out)
+      ros::param::set(initial_endcaps_params[i], params_out);
+    }
+    // estimation::publish_tensegrity_msg(poses[0], poses[1], poses[2], tensegrity_bars_publisher, "world", 0);
+  }
+
+  void send_poses()
   {
     for (int i = 0; i < initial_poses_params.size(); ++i)
     {
       std::vector<double> params_out;
+
       gtsam::Quaternion quat{ poses[i].rotation().toQuaternion() };
       Eigen::Vector3d t{ poses[i].translation() };
       params_out.push_back(quat.w());
@@ -192,21 +217,37 @@ struct tensegrity_3d_icp_t
     tensegrity::utils::csv_reader_t reader(filename);
 
     // Assuming (0,1) -> red; (2,3) -> green; (4,5) -> blue
-    std::array<Eigen::Vector3d, 6> estimates;
     while (reader.has_next_line())
     {
       auto line = reader.next_line();
-      if (line.size() >= 5)
+      if (line.size() == 0)
+        continue;
+      if (line[0] == "#")
+        continue;
+      if (line.size() > 4)
       {
-        if (line[0] == "#")
-          continue;
-
+        // Assuming: ID Color x_camera y_camera z_camera x_world y_world z_world
+        // Reading world positions
         int idx{ tensegrity::utils::convert_to<int>(line[0]) };
         double x{ tensegrity::utils::convert_to<double>(line[2]) };
         double y{ tensegrity::utils::convert_to<double>(line[3]) };
         double z{ tensegrity::utils::convert_to<double>(line[4]) };
         estimates[idx] = Eigen::Vector3d(x, y, z);
       }
+    }
+    while (not _camera_interface->valid())
+    {
+      PRINT_MSG_ONCE("[TensegrityInitializer] waiting for camera info");
+      ros::spinOnce();
+      ros::Duration(0.5).sleep();
+    }
+    PRINT_MSG_ONCE("[TensegrityInitializer] camera info received");
+    for (auto& zi : estimates)
+    {
+      // const Eigen::Vector4d pt1{ Eigen::Vector4d(zi[0], zi[1], zi[2], 1.0) };
+      // DEBUG_VARS(zi.transpose())
+      zi = _camera_interface->camera()->pose() * zi;
+      // DEBUG_VARS(zi.transpose())
     }
 
     gtsam::Values values;
@@ -262,7 +303,7 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "img_diff_test");
   ros::NodeHandle nh("~");
 
-  tensegrity_3d_icp_t node(nh);
+  tensegrity_initializer_t node(nh);
   while (ros::ok())
   {
     if (node._node_status->status() == interface::NodeStatus::RUNNING)

@@ -99,10 +99,10 @@ private:
   const std::string _label;
 };
 
-template <typename SE3>
-class tensegrity_cap_observation_t : public gtsam::NoiseModelFactorN<SE3, Eigen::Vector<double, 3>>
+class tensegrity_cap_observation_t : public gtsam::NoiseModelFactorN<gtsam::Pose3, Eigen::Vector<double, 6>>
 {
-  using Velocity = Eigen::Vector<double, 3>;
+  using SE3 = gtsam::Pose3;
+  using Velocity = Eigen::Vector<double, 6>;
   using Base = gtsam::NoiseModelFactorN<SE3, Velocity>;
   using Derived = tensegrity_cap_observation_t;
 
@@ -125,8 +125,8 @@ public:
 
   tensegrity_cap_observation_t(const gtsam::Key key_x, const gtsam::Key key_xdot, const double dt,  // no-lint
                                const Translation offset, const Translation z,                       // no-lint
-                               const NoiseModel& cost_model, const std::string label = "TensegrityCapObservation")
-    : Base(cost_model, key_x, key_xdot), _dt(dt), _z(z), _offset(offset), _label(label)
+                               const NoiseModel& cost_model)
+    : Base(cost_model, key_x, key_xdot), _dt(dt), _z(z), _offset(offset)
   {
   }
 
@@ -140,10 +140,10 @@ public:
   {
     Eigen::Matrix<double, DimZ, DimX> p_H_xdt;
     Eigen::Matrix<double, DimX, DimX> xdt_H_x, xdt_H_xdot;
-    const Eigen::Vector<double, 6> vel{ 0, 0, 0, xdot[0], xdot[1], xdot[2] };
-    const SE3 x_dt{ LieIntegrator::integrate(x, vel, dt, Hx ? &xdt_H_x : nullptr, Hxdot ? &xdt_H_xdot : nullptr) };
+    // const Eigen::Vector<double, 6> vel{ 0, 0, 0, xdot[0], xdot[1], xdot[2] };
+    const SE3 x_dt{ LieIntegrator::integrate(x, xdot, dt, Hx ? &xdt_H_x : nullptr, Hxdot ? &xdt_H_xdot : nullptr) };
 
-    const Translation cap_prediction{ x_dt.transformTo(offset, p_H_xdt) };
+    const Translation cap_prediction{ x_dt.transformFrom(offset, p_H_xdt) };
     if (Hx)
     {
       *Hx = p_H_xdt * xdt_H_x;

@@ -24,4 +24,9 @@
       TensegrityBars msg to a txt file
     </description>
   </class>
+  <class name="interface/TensegrityEndcapsMsgToFile" type="interface::TensegrityEndcapsMsgToFile"  base_class_type="nodelet::Nodelet">
+    <description> 
+      TensegrityEndcaps msg to a txt file
+    </description>
+  </class>
 </library>
