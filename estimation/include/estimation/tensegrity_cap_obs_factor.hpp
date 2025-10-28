@@ -1168,7 +1168,10 @@ public:
     const Eigen::Matrix3d diff_H_ej{ -Eigen::Matrix3d::Identity() };
     const Eigen::Matrix<double, 1, 3> dist_H_diff{ diff / distance };  // (1 / ||diff||) \dot diff
 
-    // DEBUG_VARS(ei.transpose(), ej.transpose());
+    // if (distance < 1e-5)
+    // {
+    //   DEBUG_VARS(ei.transpose(), ej.transpose(), diff.transpose());
+    // }
     if (Hxi)
     {
       *Hxi = dist_H_diff * diff_H_ei * ei_H_xi;
@@ -2143,5 +2146,131 @@ public:
 private:
   const Translation _measurement;
   const Translation _offset;
+};
+
+class black_pt_bars_factor_t : public gtsam::NoiseModelFactorN<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3>
+{
+public:
+  using SE3 = gtsam::Pose3;
+  using Translation = Eigen::Vector<double, 3>;
+  using Rotation = gtsam::Rot3;
+  using SkewMatrix = Eigen::Matrix<double, 3, 3>;
+  using Base = gtsam::NoiseModelFactorN<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3>;
+  using NoiseModel = gtsam::noiseModel::Base::shared_ptr;
+  using Jacobian = Eigen::Matrix<double, 3, 6>;
+  using Meassurement = Eigen::Vector<double, 1>;
+  using Error = Eigen::VectorXd;
+
+  black_pt_bars_factor_t(const gtsam::Key key_X0, const gtsam::Key key_X1, const gtsam::Key key_X2,
+                         const Translation zi, const NoiseModel& cost_model = nullptr)
+    : Base(cost_model, key_X0, key_X1, key_X2), _zi(zi)
+  {
+  }
+
+  virtual Eigen::VectorXd evaluateError(const SE3& x0, const SE3& x1, const SE3& x2,
+                                        boost::optional<Eigen::MatrixXd&> H0 = boost::none,
+                                        boost::optional<Eigen::MatrixXd&> H1 = boost::none,
+                                        boost::optional<Eigen::MatrixXd&> H2 = boost::none) const override
+  {
+    Eigen::Matrix<double, 3, 6> z0_H_x0, z1_H_x1, z2_H_x2;
+    const Translation z0{ x0.transformTo(_zi, z0_H_x0) };
+    const Translation z1{ x1.transformTo(_zi, z1_H_x1) };
+    const Translation z2{ x2.transformTo(_zi, z2_H_x2) };
+
+    // const Eigen::Vector2d diff{ ptl.head(2) - x.translation().head(2) };
+    // const Translation& xt3{ x.translation(xt3_H_x) };
+    // Eigen::Matrix<double, 3, 6> xPt0_H_x0, xPt1_H_x1, xPt2_H_x2;
+    // const Translation x_pt0{ x0.translation(xPt0_H_x0) };
+    // const Translation x_pt1{ x1.translation(xPt1_H_x1) };
+    // const Translation x_pt2{ x2.translation(xPt2_H_x2) };
+
+    // // Eigen::Matrix<double, 1, 2> d_H_xt2, d_H_pt2;
+    // const Eigen::Vector<double, 2> diff0{ z0.head(2) - x_pt0.head(2) };
+    // const Eigen::Vector<double, 2> diff1{ z1.head(2) - x_pt1.head(2) };
+    // const Eigen::Vector<double, 2> diff2{ z2.head(2) - x_pt2.head(2) };
+
+    const double dist0{ z0.head(2).norm() };
+    const double dist1{ z1.head(2).norm() };
+    const double dist2{ z2.head(2).norm() };
+
+    if (H0)
+    {
+      *H0 = Eigen::Matrix<double, 1, 6>::Zero();
+    }
+    if (H1)
+    {
+      *H1 = Eigen::Matrix<double, 1, 6>::Zero();
+    }
+    if (H2)
+    {
+      *H2 = Eigen::Matrix<double, 1, 6>::Zero();
+    }
+
+    Eigen::Vector<double, 1> error;
+    if (dist0 <= dist1 and dist0 <= dist2)
+    {
+      error[0] = dist0;
+
+      if (H0)
+      {
+        const Eigen::Matrix<double, 1, 2> dist_H_diff{ z0.head(2) / dist0 };  // (1 / ||diff||) \dot diff
+        const Eigen::Matrix<double, 2, 2> diff_H_z{ Eigen::Matrix<double, 2, 2>::Identity() };
+        const Eigen::Matrix<double, 2, 2> diff_H_xPt{ -Eigen::Matrix<double, 2, 2>::Identity() };
+        const Eigen::Matrix<double, 2, 3> Pt2D_H_Pt3D{ Eigen::Matrix<double, 2, 3>::Identity() };
+
+        *H0 = dist_H_diff * Pt2D_H_Pt3D * z0_H_x0;
+      }
+    }
+    else if (dist1 <= dist0 and dist1 <= dist2)
+    {
+      error[0] = dist1;
+
+      if (H1)
+      {
+        const Eigen::Matrix<double, 1, 2> dist_H_diff{ z1.head(2) / dist1 };  // (1 / ||diff||) \dot diff
+        const Eigen::Matrix<double, 2, 2> diff_H_z{ Eigen::Matrix<double, 2, 2>::Identity() };
+        const Eigen::Matrix<double, 2, 2> diff_H_xPt{ -Eigen::Matrix<double, 2, 2>::Identity() };
+        const Eigen::Matrix<double, 2, 3> Pt2D_H_Pt3D{ Eigen::Matrix<double, 2, 3>::Identity() };
+
+        *H1 = dist_H_diff * Pt2D_H_Pt3D * z1_H_x1;
+      }
+    }
+    else if (dist2 <= dist0 and dist2 <= dist1)
+    {
+      error[0] = dist2;
+      if (H2)
+      {
+        const Eigen::Matrix<double, 1, 2> dist_H_diff{ z2.head(2) / dist2 };  // (1 / ||diff||) \dot diff
+        const Eigen::Matrix<double, 2, 2> diff_H_z{ Eigen::Matrix<double, 2, 2>::Identity() };
+        const Eigen::Matrix<double, 2, 2> diff_H_xPt{ -Eigen::Matrix<double, 2, 2>::Identity() };
+        const Eigen::Matrix<double, 2, 3> Pt2D_H_Pt3D{ Eigen::Matrix<double, 2, 3>::Identity() };
+
+        *H2 = dist_H_diff * Pt2D_H_Pt3D * z2_H_x2;
+      }
+    }
+    // DEBUG_VARS(dist0, dist1, dist2, error[0])
+    // DEBUG_VARS(_zi.transpose())
+    // DEBUG_VARS(z0.transpose())
+    // DEBUG_VARS(z1.transpose())
+    // DEBUG_VARS(z2.transpose())
+    // const Translation pred{ predict(xi, _offset, Hx) };
+    // const Translation error{ pred - _measurement };
+    return error;
+  }
+
+  void print(const std::string& s, const gtsam::KeyFormatter& keyFormatter) const override
+  {
+    const std::string key_x0{ keyFormatter(this->template key<1>()) };
+    const std::string key_x1{ keyFormatter(this->template key<2>()) };
+    const std::string key_x2{ keyFormatter(this->template key<3>()) };
+    // const std::string plant_name{ _prx_system->get_pathname() };
+    std::cout << s << "Endcap observation Factor:";
+    std::cout << "[ " << key_x0 << ", " << key_x1 << ", " << key_x2 << " ]\n";
+    std::cout << "\t zi: " << _zi.transpose() << "\n";
+    std::cout << "\n";
+  }
+
+private:
+  const Translation _zi;
 };
 }  // namespace estimation

@@ -526,6 +526,8 @@ struct tensegrity_graph_inputs_t
 
   int idx_major;
   bool add_cable_meassurements;
+  bool add_between_prior;
+
   // int idx_minor;
 
   Eigen::Vector3d offset;
@@ -537,10 +539,13 @@ struct tensegrity_graph_inputs_t
 
   std::array<gtsam::noiseModel::Base::shared_ptr, 6> noise_models;
 
+  gtsam::noiseModel::Base::shared_ptr btw_noise;
   // Cable vars
   Eigen::Vector<double, 9> cables;
   std::array<std::pair<int, int>, 9> cable_map;
   gtsam::noiseModel::Base::shared_ptr cable_noise;
+
+  std::vector<Eigen::Vector3d> black_pts;
 };
 
 struct tensegrity_graph_output_t
@@ -548,6 +553,8 @@ struct tensegrity_graph_output_t
   std::array<gtsam::Key, 3> keys_pose;
   std::array<gtsam::Key, 3> keys_rotA;
   std::array<gtsam::Key, 3> keys_rotB;
+
+  bool valid;
 
   gtsam::Values values;
   gtsam::NonlinearFactorGraph graph;
@@ -569,13 +576,62 @@ tensegrity_graph_output_t create_tensegrity_graph(const tensegrity_graph_inputs_
   const gtsam::Rot3& Roffset{ input.Roffset };
 
   const gtsam::noiseModel::Base::shared_ptr rot_prior_nm{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-4) };
+  const double true_dist{ 2 * offset.norm() };
+  std::array<int, 3> tot_endcaps{ { 0, 0, 0 } };
+  for (int i = 0; i < 3; ++i)
+  {
+    if (input.endcaps[2 * i] and input.endcaps[2 * i + 1])
+    {
+      const Eigen::Vector3d& eA{ *(input.endcaps[2 * i]) };
+      const Eigen::Vector3d& eB{ *(input.endcaps[2 * i + 1]) };
+      const double dist{ (eA - eB).norm() };
+      if (not(0.7 * true_dist < dist and dist < true_dist * 1.3))
+      {
+        output.valid = false;
+        DEBUG_VARS(eA.transpose(), eB.transpose())
+        DEBUG_VARS(i, true_dist, dist, 0.7 * true_dist < dist, dist < true_dist * 1.3)
+        return output;
+      }
+      tot_endcaps[i] = 2;
+    }
+    else if (input.endcaps[2 * i] or input.endcaps[2 * i + 1])
+    {
+      tot_endcaps[i] = 1;
+    }
+  }
+  int min_caps{ input.add_cable_meassurements ? 1 : 2 };
+  const int tot{ tot_endcaps[0] + tot_endcaps[1] + tot_endcaps[2] };
+  if (input.add_cable_meassurements)
+  {
+    const int zeros{ tot_endcaps[0] == 0 + tot_endcaps[1] == 0 + tot_endcaps[2] == 0 };
+    const int ones{ tot_endcaps[0] == 1 + tot_endcaps[1] == 1 + tot_endcaps[2] == 1 };
+    // if (not(tot_endcaps[0] >= 1 and tot_endcaps[1] >= 1 and tot_endcaps[2] >= 1))
+    if (tot <= 2 or (tot == 3 and zeros > 0))
+    {
+      output.valid = false;
+      DEBUG_VARS(tot_endcaps)
+      return output;
+    }
+  }
+  else
+  {
+    if (tot < 3 or (tot_endcaps[0] == 0 or tot_endcaps[1] == 0 or tot_endcaps[2] == 0))
+    {
+      output.valid = false;
+      DEBUG_VARS(tot_endcaps)
+      return output;
+    }
+  }
+  output.valid = true;
   for (int i = 0; i < 3; ++i)
   {
     output.keys_pose[i] = estimation::rod_symbol(i, input.idx_major);
     output.keys_rotA[i] = estimation::rotation_symbol(i, input.idx_major, 0);
     output.keys_rotB[i] = estimation::rotation_symbol(i, input.idx_major, 1);
 
-    const gtsam::Pose3 init_pose{ input.init_poses[i] ? *(input.init_poses[i]) : gtsam::Pose3() };
+    const gtsam::Pose3 init_pose{ input.init_poses[i] ? *(input.init_poses[i]) :
+                                                        factor_graphs::random<gtsam::Pose3>() };
+    // init_pose.print("init_pose");
     estimation::add_to_values(values, output.keys_pose[i], init_pose);
     estimation::add_to_values(values, output.keys_rotA[i], gtsam::Rot3());
     estimation::add_to_values(values, output.keys_rotB[i], Roffset.inverse());
@@ -599,6 +655,24 @@ tensegrity_graph_output_t create_tensegrity_graph(const tensegrity_graph_inputs_
     graph.emplace_shared<RotationFixIdentity>(output.keys_rotA[i], output.keys_rotB[i], Roffset, rot_prior_nm);
   }
 
+  // DEBUG_VARS(input.add_between_prior)
+  if (input.add_between_prior)
+  {
+    using BetweenFactor = gtsam::BetweenFactor<gtsam::Pose3>;
+    TENSEGRITY_ASSERT(input.init_poses[0], "[create_tensegrity_graph] Between prior needs to specify init_pose[0]");
+    TENSEGRITY_ASSERT(input.init_poses[1], "[create_tensegrity_graph] Between prior needs to specify init_pose[1]");
+    TENSEGRITY_ASSERT(input.init_poses[2], "[create_tensegrity_graph] Between prior needs to specify init_pose[2]");
+
+    const gtsam::Pose3 betw_01{ gtsam::traits<gtsam::Pose3>::Between(*(input.init_poses[0]), *(input.init_poses[1])) };
+    const gtsam::Pose3 betw_12{ gtsam::traits<gtsam::Pose3>::Between(*(input.init_poses[1]), *(input.init_poses[2])) };
+    const gtsam::Pose3 betw_20{ gtsam::traits<gtsam::Pose3>::Between(*(input.init_poses[2]), *(input.init_poses[0])) };
+    // gtsam::noiseModel::Base::shared_ptr btw_noise{ gtsam::noiseModel::Isotropic::Sigma(6, 1e-2) };
+    // input.btw_noise->print("btw noise");
+
+    graph.emplace_shared<BetweenFactor>(output.keys_pose[0], output.keys_pose[1], betw_01, input.btw_noise);
+    graph.emplace_shared<BetweenFactor>(output.keys_pose[1], output.keys_pose[2], betw_12, input.btw_noise);
+    graph.emplace_shared<BetweenFactor>(output.keys_pose[2], output.keys_pose[0], betw_20, input.btw_noise);
+  }
   if (input.add_cable_meassurements)
   {
     const Eigen::Vector<double, 9>& zi{ input.cables };
@@ -607,28 +681,36 @@ tensegrity_graph_output_t create_tensegrity_graph(const tensegrity_graph_inputs_
     int i = 0;
     for (; i < 3; ++i)
     {
-      const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
-      const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
-      const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 0) };
-      const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 0) };
+      // Assuming endcap 0&1 belong to bar 0. 2&3 to bar 1 and 4&5 to bar 2
+      const gtsam::Key key_Xi{ output.keys_pose[input.cable_map[i].first / 2] };   //
+      const gtsam::Key key_Xj{ output.keys_pose[input.cable_map[i].second / 2] };  //
+      const gtsam::Key key_Ri{ output.keys_rotB[input.cable_map[i].first / 2] };   // RotA
+      const gtsam::Key key_Rj{ output.keys_rotB[input.cable_map[i].second / 2] };  // RotA
 
+      // PRINT_KEYS(key_Xi, key_Xj, key_Ri, key_Rj);
+      // DEBUG_VARS(zi[i], offset.transpose())
       graph.emplace_shared<CablesFactor>(key_Xi, key_Xj, key_Ri, key_Rj, zi[i], offset, cable_noise);
     }
     for (; i < 6; ++i)
     {
-      const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
-      const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
-      const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 1) };
-      const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 1) };
+      const gtsam::Key key_Xi{ output.keys_pose[input.cable_map[i].first / 2] };   //
+      const gtsam::Key key_Xj{ output.keys_pose[input.cable_map[i].second / 2] };  //
+      const gtsam::Key key_Ri{ output.keys_rotA[input.cable_map[i].first / 2] };   // RotA
+      const gtsam::Key key_Rj{ output.keys_rotA[input.cable_map[i].second / 2] };  // RotA
 
       graph.emplace_shared<CablesFactor>(key_Xi, key_Xj, key_Ri, key_Rj, zi[i], offset, cable_noise);
     }
     for (; i < 9; ++i)
     {
-      const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
-      const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
-      const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 0) };
-      const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 1) };
+      const gtsam::Key key_Xi{ output.keys_pose[input.cable_map[i].first / 2] };   //
+      const gtsam::Key key_Xj{ output.keys_pose[input.cable_map[i].second / 2] };  //
+      const gtsam::Key key_Ri{ output.keys_rotB[input.cable_map[i].first / 2] };   // RotA
+      const gtsam::Key key_Rj{ output.keys_rotA[input.cable_map[i].second / 2] };  // RotB
+
+      // const gtsam::Key key_Xi{ rod_symbol(input.cable_map[i].first, input.idx_major) };
+      // const gtsam::Key key_Xj{ rod_symbol(input.cable_map[i].second, input.idx_major) };
+      // const gtsam::Key key_Ri{ rotation_symbol(input.cable_map[i].first, input.idx_major, 0) };
+      // const gtsam::Key key_Rj{ rotation_symbol(input.cable_map[i].second, input.idx_major, 1) };
 
       graph.emplace_shared<CablesFactor>(key_Xi, key_Xj, key_Ri, key_Rj, zi[i], offset, cable_noise);
     }
@@ -646,6 +728,15 @@ tensegrity_graph_output_t create_tensegrity_graph(const tensegrity_graph_inputs_
     //   graph.emplace_shared<RotationFixIdentity>(key_Ri, key_Rj, Roffset, rot_prior_nm);
     // }
   }
+
+  const gtsam::noiseModel::Base::shared_ptr black_pts_nm{ gtsam::noiseModel::Isotropic::Sigma(1, 1e-1) };
+  for (int i = 0; i < input.black_pts.size(); ++i)
+  {
+    using BlackPtsFactor = estimation::black_pt_bars_factor_t;
+    graph.emplace_shared<BlackPtsFactor>(output.keys_pose[0], output.keys_pose[1], output.keys_pose[2],
+                                         input.black_pts[i], black_pts_nm);
+  }
+
   return output;
 }
 

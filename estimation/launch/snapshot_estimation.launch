@@ -1,7 +1,7 @@
 <launch>
 
     <arg name="filename" default=""/>
-    <arg name="use_cable_sensors" default="true"/>
+    <!-- <arg name="use_cable_sensors" default="true"/> -->
 	<arg name="frame" default="world"/>
     <arg name="visualize" default="true"/>
     <arg name="autostart" default="false"/>

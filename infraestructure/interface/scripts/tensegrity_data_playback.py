@@ -34,7 +34,8 @@ class TensegrityDataPublisher(object):
         self.output_to_file = rospy.get_param("~output_to_file", False)
         self.fix_dt = rospy.get_param("~fix_dt", 0.0)
         self.publish_npy_poses = rospy.get_param("~publish_npy_poses", False)
-
+        self.publish_on_ready = rospy.get_param("~publish_on_ready", False)
+        
         red_endcaps_topic = rospy.get_param("~red_endcaps_topic", "");
         green_endcaps_topic = rospy.get_param("~green_endcaps_topic", "");
         blue_endcaps_topic = rospy.get_param("~blue_endcaps_topic", "");
@@ -413,7 +414,7 @@ class TensegrityDataPublisher(object):
 
             if self.node_status.status != NodeStatus.RUNNING:
                 # print(f"NOT RUNNING")
-                if self.node_status.status == NodeStatus.READY:
+                if self.node_status.status == NodeStatus.READY and self.publish_on_ready:
                     # print(f"READY")
                     rgb_msg = self.get_image_msg(self.rgb_images, "color")
                     depth_msg = self.get_image_msg(self.depth_images, "gray")

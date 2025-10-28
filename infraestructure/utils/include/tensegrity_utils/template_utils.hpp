@@ -1,5 +1,6 @@
 #pragma once
 #include <memory>
+#include <optional>
 #include <type_traits>
 #include <boost/smart_ptr/shared_ptr.hpp>
 
@@ -105,5 +106,25 @@ struct is_streamable<T, std::enable_if_t<std::is_convertible_v<
   : std::true_type
 {
 };
+
+template <typename T, typename = void>
+struct is_optional : std::false_type
+{
+};
+
+template <typename T>
+struct is_optional<std::optional<T>> : std::true_type
+{
+};
+
+// template <typename T, Eigen::Index idx, typename = void>
+// struct is_eigen_vector : std::false_type
+// {
+// };
+
+// template <typename T, Eigen::Index idx>
+// struct is_eigen_vector<Eigen::Vector<T, idx>> : std::true_type
+// {
+// };
 }  // namespace utils
 }  // namespace tensegrity

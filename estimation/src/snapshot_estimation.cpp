@@ -102,6 +102,7 @@ int main(int argc, char* argv[])
 
   interface::node_status_t node_status(nh, "/nodes/state_estimation/", false);
   const bool save_poses{ poses_filename != "" };
+  DEBUG_VARS(poses_filename)
   std::ofstream poses_file;
   if (save_poses)
     poses_file.open(poses_filename, std::ios::out);
@@ -133,6 +134,7 @@ int main(int argc, char* argv[])
   observation_update.Roffset = Roffset;
   // estimation::ColorMapping color_map{ estimation::create_cable_map(cable_map_filename) };
 
+  ros::Time ti;
   node_status.status(interface::NodeStatus::READY);
   std::string red_str, green_str, blue_str;
   const std::string invalid_str{ "NaN NaN NaN NaN NaN NaN NaN " };
@@ -160,6 +162,18 @@ int main(int argc, char* argv[])
 
       if (valid_red or valid_green or valid_blue)
       {
+        if (valid_red)
+        {
+          ti = red_rod.get_last_time();
+        }
+        else if (valid_green)
+        {
+          ti = green_rod.get_last_time();
+        }
+        else if (valid_blue)
+        {
+          ti = blue_rod.get_last_time();
+        }
         // graph.print("graph", SF::formatter);
         // values.print("values", SF::formatter);
         Values result{ lm_helper.optimize(graph, values, true) };
@@ -193,8 +207,9 @@ int main(int argc, char* argv[])
         }
         idx = red_rod.seq;
 
+        const std::string timestamp{ tensegrity::utils::convert_to<std::string>(ti) };
         poses_file << idx << " ";
-        poses_file << red_rod.ti << " ";
+        poses_file << timestamp << " ";
         poses_file << red_str << " ";
         poses_file << green_str << " ";
         poses_file << blue_str << " ";
@@ -210,6 +225,7 @@ int main(int argc, char* argv[])
     ros::spinOnce();
     rate.sleep();
   }
+  poses_file.close();
   node_status.status(interface::NodeStatus::STOPPED);
   ros::spinOnce();
   rate.sleep();

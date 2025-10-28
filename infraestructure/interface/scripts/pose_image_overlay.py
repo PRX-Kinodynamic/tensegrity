@@ -78,7 +78,7 @@ class PoseImageOverlay(object):
 
     def camera_info_callback(self, msg):
         self.camera_intrinsic = np.array(msg.K, dtype=np.float32).reshape((3,3))
-        print(f"camera_intrinsic: {self.camera_intrinsic}")
+        # print(f"camera_intrinsic: {self.camera_intrinsic}")
 
     def find_closest_image(self, stamp):   
         closest_time = 100000

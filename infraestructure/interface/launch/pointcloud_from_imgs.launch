@@ -15,7 +15,7 @@
 	<include file="$(find perception)/launch/tensegrity_from_imgs.launch">
         <arg name="img_directory" default="$(arg img_directory)"/>
         <arg name="loop" default="false"/>
-        <arg name="sim_clock" default="false"/>
+        <arg name="sim_clock" default="true"/>
         <arg name="max_images" default="1"/>
         <arg name="output_dir" default="$(arg output_dir)"/>
         <arg name="filename_prefix" default="$(arg filename_prefix)_gt"/>

@@ -51,6 +51,20 @@ inline void print_value(std::ostream& stream, const Value& value)
   // stream << "\n";
 }
 
+template <typename Value, std::enable_if_t<utils::is_optional<Value>::value, bool> = true>
+inline void print_value(std::ostream& stream, const Value& value)
+{
+  if (value)
+  {
+    print_value(stream, *value);
+  }
+  else
+  {
+    stream << "[NullOpt] ";
+  }
+  // stream << "\n";
+}
+
 inline void print_variables(std::ostream& stream, bool color, std::string name)
 {
   stream << std::endl;

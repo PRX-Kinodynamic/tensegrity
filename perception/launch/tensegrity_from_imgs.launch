@@ -72,21 +72,21 @@
             <param name="endcap_topic" value="/gt/red/endcaps" />
             <param name="rgba" type="yaml" value="[1.0, 0.0, 0.0, 1.0]" />
             <param name="point_scale" value="0.03" />
-            <param name="max_endcaps_to_visualize" value="1000" />
+            <param name="max_endcaps_to_visualize" value="1" />
             <param name="node_id" value="red_endcap_to_marker_gt"/>
         </node>
         <node pkg="nodelet" type="nodelet" name="green_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
             <param name="endcap_topic" value="/gt/green/endcaps" />
             <param name="rgba" type="yaml" value="[0.0, 1.0, 0.0, 1.0]" />
             <param name="point_scale" value="0.03" />
-            <param name="max_endcaps_to_visualize" value="1000" />
+            <param name="max_endcaps_to_visualize" value="1" />
             <param name="node_id" value="green_endcap_to_marker_gt"/>
         </node>
         <node pkg="nodelet" type="nodelet" name="blue_endcap_to_marker_gt" args="load perception/EndcapToMarker viz_nodelet" output="screen">
             <param name="endcap_topic" value="/gt/blue/endcaps" />
             <param name="rgba" type="yaml" value="[0.0, 0.0, 1.0, 1.0]" />
             <param name="point_scale" value="0.03" />
-            <param name="max_endcaps_to_visualize" value="1000" />
+            <param name="max_endcaps_to_visualize" value="1" />
             <param name="node_id" value="blue_endcap_to_marker_gt"/>
         </node>
 
@@ -98,6 +98,9 @@
             <param name="alpha" value="0.5" />
             <!-- <param name="max_endcaps_to_visualize" value="1" /> -->
         </node>
+        <!-- [-0.7028508  -0.02005704  0.7111247   0.6072368 ]
+ [ 0.7098483   0.04493016  0.702955   -0.10534289]
+ [-0.04605015  0.99886316 -0.01734174 -1.0030894 ] -->
     <node pkg="tf2_ros" type="static_transform_publisher" name="tf_world_mocaps" 
-        args="0.62101386 -0.05195664 -1.0011855 0.2498242, 0.6606265, 0.6518721, 0.2760857 world mocaps" />
+        args="0.6072368 -0.10534289 -1.0030894 0.259325, 0.6643274, 0.6404838, 0.2849564  world mocaps" />
 </launch>

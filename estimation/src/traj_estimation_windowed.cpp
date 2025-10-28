@@ -23,6 +23,7 @@
 #include <interface/TensegrityBarsArray.h>
 #include <interface/TensegrityTrajectory.h>
 #include <interface/node_status.hpp>
+#include <interface/type_conversions.hpp>
 
 #include <estimation/bar_utilities.hpp>
 #include <estimation/endcap_subscriber.hpp>
@@ -78,7 +79,7 @@ struct traj_estimation_t
 
   ros::Timer _graph_timer, _publisher_timer, _traj_pub_timer;
   ros::Subscriber _endcaps_subscriber;
-  ros::Publisher _tensegrity_traj_publisher;
+  ros::Publisher _tensegrity_traj_publisher, _tensegrity_endcaps_publisher;
   ros::Publisher _tensegrity_multi_publisher, _tensegrity_bars_publisher;
   std::array<ros::Publisher, 6> _endcaps_pubs;
   Graph _graph;
@@ -115,7 +116,7 @@ struct traj_estimation_t
   ros::Time _prev_timepoint;
   ros::Timer _timer;
   bool visualize;
-  std::vector<interface::TensegrityEndcaps> _endcaps_q;
+  std::deque<interface::TensegrityEndcaps> _endcaps_q;
   int window_size;
   double window_dt;
   double _traj_ti;
@@ -127,9 +128,11 @@ struct traj_estimation_t
   std::array<bool, 6> _endcaps_valid;
   std::array<gtsam::JacobianFactor::shared_ptr, 6> _endcap_priors;
 
+  ros::Time _prev_stamp;
   estimation::tensegrity_graph_inputs_t _tg_input;
   std::shared_ptr<estimation::sensors_callback_t> _sensors_callback;
   // std::shared_ptr<estimation::cables_callback_t> _cables_callback;
+  std::ofstream _poses_file;
 
   traj_estimation_t(ros::NodeHandle& nh)
     : _idx(0)
@@ -147,6 +150,7 @@ struct traj_estimation_t
     , _prev_timepoint(0)
     , _rot_idx(0)
     , _state_idx(0)
+    , _prev_stamp(0)
   // , _colors({ estimation::RodColors::RED, estimation::RodColors::GREEN, estimation::RodColors::BLUE })
   {
     // interface::node_status_t node_status(nh, "/nodes/traj_estimation/");
@@ -155,8 +159,8 @@ struct traj_estimation_t
 
     _tg_input.offset = _offset;
     _tg_input.Roffset = _Roffset;
-    // lm_params.setVerbosityLM("SILENT");
-    _lm_params.setVerbosityLM("SUMMARY");
+    _lm_params.setVerbosityLM("SILENT");
+    // _lm_params.setVerbosityLM("SUMMARY");
     _lm_params.setMaxIterations(10);
     _lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/state_estimation/fg", _lm_params);
 
@@ -164,17 +168,20 @@ struct traj_estimation_t
     std::string tensegrity_pose_topic, tensegrity_traj_topic;
     std::string cables_topic, cable_map_filename;
     std::string initial_estimate_filename;
-    std::string tensegrity_endcaps_topic, tensegrity_multi_topic;
+    std::string tensegrity_endcaps_topic, tensegrity_multi_topic, estimated_endcaps_topic;
+    std::string poses_filename;
     // double resolution;
     bool use_cable_sensors{ true };
     double trajectory_pub_frequency;
-    double frequency{ 10 };
+    double frequency{ 30 };
 
     PARAM_SETUP(nh, visualize);
     PARAM_SETUP(nh, tensegrity_pose_topic)
     PARAM_SETUP(nh, cable_map_filename)
     PARAM_SETUP(nh, tensegrity_endcaps_topic);
+    PARAM_SETUP(nh, estimated_endcaps_topic);
     PARAM_SETUP(nh, initial_endcaps_params);
+    PARAM_SETUP(nh, poses_filename);
     PARAM_SETUP_WITH_DEFAULT(nh, frequency, frequency);
     PARAM_SETUP_WITH_DEFAULT(nh, window_dt, window_dt);
     PARAM_SETUP_WITH_DEFAULT(nh, window_size, window_size);
@@ -184,24 +191,24 @@ struct traj_estimation_t
     // PARAM_SETUP(nh, optimization_frequency);  // How fast to run the optimizer
     // PARAM_SETUP(nh, publisher_frequency)
     // PARAM_SETUP(nh, trajectory_pub_frequency)
+    _poses_file.open(poses_filename, std::ios::out);
 
     _node_status = interface::node_status_t::create(nh, false);
 
     _endcaps_subscriber = nh.subscribe(tensegrity_endcaps_topic, 1, &This::endcaps_callback, this);
     _sensors_callback = std::make_shared<estimation::sensors_callback_t>(nh);
-
     const ros::Duration timer(1.0 / frequency);
     _timer = nh.createTimer(timer, &This::timer_callback, this);
     // PARAM_SETUP(nh, tensegrity_pose_topic);
     // PARAM_SETUP(nh, tensegrity_traj_topic)
     // PARAM_SETUP(nh, initial_estimate_filename)
     _tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
+    _tensegrity_endcaps_publisher = nh.advertise<interface::TensegrityEndcaps>(estimated_endcaps_topic, 1, true);
     // _tensegrity_multi_publisher = nh.advertise<interface::TensegrityBarsArray>(tensegrity_multi_topic, 1, true);
 
     // _tg_input.cable_map = {};
     _tg_input.cable_noise = gtsam::noiseModel::Isotropic::Sigma(1, 1.6e-2);
     _tg_input.cable_map = estimation::create_cable_map_fix_endcaps(cable_map_filename);
-
     // red_rod = std::make_shared<rod_callback_t>(nh, red_endcaps_topic);
     // blue_rod = std::make_shared<rod_callback_t>(nh, blue_endcaps_topic);
     // green_rod = std::make_shared<rod_callback_t>(nh, green_endcaps_topic);
@@ -257,6 +264,7 @@ struct traj_estimation_t
 
   ~traj_estimation_t()
   {
+    _poses_file.close();
     // node_status->status(interface::NodeStatus::STOPPED);
     // ros::Duration(1.0).sleep();
   }
@@ -304,13 +312,29 @@ struct traj_estimation_t
             marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
       }
 
-      publish_estimation();
+      // publish_estimation();
       _node_status->status(interface::NodeStatus::RUNNING);
     }
   }
 
   void publish_estimation()
   {
+    using tensegrity::utils::convert_to;
+
+    interface::TensegrityEndcaps msg;
+    tensegrity::utils::init_header(msg.header, "world");
+    msg.message = "TrajEstimation";
+    msg.header.stamp = _prev_stamp;  // At this point _prev_stamp already has the new one
+    // const std::string timestamp{ tensegrity::utils::convert_to<std::string>(msg.header.stamp) };
+    // DEBUG_VARS(timestamp);
+    for (int i = 0; i < 6; ++i)
+    {
+      const Eigen::Vector3d& z{ _endcaps[i] };
+      msg.endcaps.push_back(convert_to<geometry_msgs::Point>(z));
+      msg.ids.push_back(i);
+    }
+
+    _tensegrity_endcaps_publisher.publish(msg);
     if (visualize)
     {
       for (int i = 0; i < 6; ++i)
@@ -387,9 +411,10 @@ struct traj_estimation_t
   void endcaps_callback(const interface::TensegrityEndcapsConstPtr msg)
   {
     _endcaps_q.emplace_back(*msg);
-    process_endcaps(*msg);
+    // process_endcaps(*msg);
+    // const std::string traj_timestamp{ tensegrity::utils::convert_to<std::string>(msg->header.stamp) };
+    // DEBUG_VARS(traj_timestamp)
     // select_endcaps(*msg);
-    // build_all_graphs(*);
   }
 
   void process_endcaps(const interface::TensegrityEndcaps& endcaps_new)
@@ -417,21 +442,53 @@ struct traj_estimation_t
     for (int i = 0; i < 6; ++i)
     {
       _tg_input.noise_models[i] = gtsam::noiseModel::Isotropic::Sigma(3, 1e-2);
-      if (prop_endcaps[i].size() == 0)
+      // if (prop_endcaps[i].size() == 0)
+      // {
+      //   DEBUG_VARS(i, "OPT")
+      //   prop_endcaps[i].push_back(std::nullopt);
+      // }
+    }
+
+    _tg_input.black_pts.clear();
+    for (int i = 0; i < endcaps_new.bar_pts.size(); ++i)
+    {
+      interface::copy(e_new, endcaps_new.bar_pts[i]);
+      _tg_input.black_pts.push_back(e_new);
+      // break;
+    }
+
+    std::array<std::vector<RodObservation>, 3> observation_pairs;
+    for (int i = 0; i < 3; ++i)
+    {
+      // check_endcap_pairs(prop_endcaps[i], prop_endcaps[i + 1]);
+      observation_pairs[i] = create_pairs(prop_endcaps[2 * i], prop_endcaps[2 * i + 1]);
+
+      for (int j = 0; j < observation_pairs[i].size(); ++j)
       {
-        DEBUG_VARS(i, "OPT")
-        prop_endcaps[i].push_back(std::nullopt);
+        auto eA = observation_pairs[i][j].first;
+        auto eB = observation_pairs[i][j].second;
+        // DEBUG_VARS(eA, eB);
       }
     }
-    DEBUG_VARS(prop_endcaps[0].size());
-    DEBUG_VARS(prop_endcaps[1].size());
-    DEBUG_VARS(prop_endcaps[2].size());
-    DEBUG_VARS(prop_endcaps[3].size());
-    DEBUG_VARS(prop_endcaps[4].size());
-    DEBUG_VARS(prop_endcaps[5].size());
 
-    std::vector<estimation::tensegrity_graph_output_t> outputs{ build_all_graphs(prop_endcaps) };
-    DEBUG_VARS(outputs.size());
+    // DEBUG_VARS(observation_pairs[0].size());
+    // DEBUG_VARS(observation_pairs[1].size());
+    // DEBUG_VARS(observation_pairs[2].size());
+    // DEBUG_VARS(prop_endcaps[0].size());
+    // DEBUG_VARS(prop_endcaps[1].size());
+    // DEBUG_VARS(prop_endcaps[2].size());
+    // DEBUG_VARS(prop_endcaps[3].size());
+    // DEBUG_VARS(prop_endcaps[4].size());
+    // DEBUG_VARS(prop_endcaps[5].size());
+
+    const double z_dt{ _prev_stamp.isZero() ? 1.0 : (endcaps_new.header.stamp - _prev_stamp).toSec() };
+    _prev_stamp = endcaps_new.header.stamp;
+
+    // Cap this to 100Hz. Necessary in case the stamp is not updated (sim) and dt is 0
+    _tg_input.btw_noise = gtsam::noiseModel::Isotropic::Sigma(6, std::max(z_dt, 0.01));
+
+    std::vector<estimation::tensegrity_graph_output_t> outputs{ build_all_graphs(observation_pairs) };
+    // DEBUG_VARS(outputs.size());
 
     gtsam::Values values;
     gtsam::NonlinearFactorGraph graph;
@@ -455,16 +512,20 @@ struct traj_estimation_t
       {
         prev_error = error;
         min_idx = idx;
-        DEBUG_VARS(min_idx, error);
+        // DEBUG_VARS(min_idx, error);
       }
+      // DEBUG_VARS(error);
       idx++;
     }
 
-    if (std::isinf(init_error) or std::isinf(tot_error) or tot_error > 1e20)
+    // DEBUG_VARS(init_error, tot_error);
+    if (std::isnan(init_error) or std::isinf(init_error) or std::isinf(tot_error) or tot_error > 1e20 or
+        init_error == tot_error)
     {
-      graph.printErrors(res, "Min Graph ", SF::formatter);
+      find_problem_graph(outputs);
     }
-    PRINT_KEY_CONTAINER(outputs[min_idx].keys_pose);
+    // graph.printErrors(res, "Min Graph ", SF::formatter);
+    // PRINT_KEY_CONTAINER(outputs[min_idx].keys_pose);
     _poses[0] = res.at<gtsam::Pose3>(outputs[min_idx].keys_pose[0]);
     _poses[1] = res.at<gtsam::Pose3>(outputs[min_idx].keys_pose[1]);
     _poses[2] = res.at<gtsam::Pose3>(outputs[min_idx].keys_pose[2]);
@@ -477,6 +538,44 @@ struct traj_estimation_t
     _endcaps[5] = _poses[2] * (res.at<gtsam::Rot3>(outputs[min_idx].keys_rotB[2]) * _offset);
 
     publish_estimation();
+
+    const std::string red_str{ tensegrity::utils::convert_to<std::string>(_poses[0]) };
+    const std::string green_str{ tensegrity::utils::convert_to<std::string>(_poses[1]) };
+    const std::string blue_str{ tensegrity::utils::convert_to<std::string>(_poses[2]) };
+
+    const int seq{ static_cast<int>(endcaps_new.header.seq) };
+    // const double timestamp{ endcaps_new.header.stamp.toSec() };
+    const std::string timestamp{ tensegrity::utils::convert_to<std::string>(_prev_stamp) };
+
+    _poses_file << seq << " ";
+    _poses_file << timestamp << " ";
+    _poses_file << red_str << " ";
+    _poses_file << green_str << " ";
+    _poses_file << blue_str << " ";
+    _poses_file << "\n";
+  }
+
+  void find_problem_graph(std::vector<estimation::tensegrity_graph_output_t>& outputs)
+  {
+    for (auto& out : outputs)
+    {
+      const gtsam::Values res{ _lm_helper->optimize(out.graph, out.values, true) };
+      const double error{ out.graph.error(res) };
+      const double init_error{ out.graph.error(out.values) };
+      const double tot_error{ out.graph.error(res) };
+      if (std::isnan(init_error) or std::isinf(init_error) or std::isinf(tot_error) or tot_error > 1e20 or
+          init_error == tot_error)
+      {
+        out.graph.printErrors(res, "Problem Graph ", SF::formatter);
+      }
+      // if (error < prev_error)
+      // {
+      //   prev_error = error;
+      //   min_idx = idx;
+      //   DEBUG_VARS(min_idx, error);
+      // }
+      // idx++;
+    }
   }
 
   void select_endcaps(const interface::TensegrityEndcaps& endcaps_new)
@@ -593,12 +692,116 @@ struct traj_estimation_t
     }
   }
 
+  std::vector<RodObservation> create_pairs(const std::vector<OptTranslation>& eAs,
+                                           const std::vector<OptTranslation>& eBs)
+  {
+    std::vector<RodObservation> pairs;
+    // std::vector<std::optional<Eigen::Vector3d>> eAs_new, eBs_new;
+    const double true_dist{ 2 * _offset.norm() };
+    // DEBUG_VARS(eAs.size(), eBs.size())
+
+    for (int i = 0; i < eAs.size(); ++i)
+    {
+      if (eAs[i])
+      {
+        bool b_added{ false };
+        const Eigen::Vector3d& eA{ *(eAs[i]) };
+        for (int j = 0; j < eBs.size(); ++j)
+        {
+          if (eBs[j])
+          {
+            const Eigen::Vector3d& eB{ *(eBs[j]) };
+            const double dist{ (eA - eB).norm() };
+            if (0.7 * true_dist < dist and dist < true_dist * 1.3)
+            {
+              // eBs_new.push_back(eB);
+              b_added = true;
+              pairs.push_back({ eA, eB });
+              // eBs.erase(eBs.begin() + j);
+              // break;
+            }
+            // else
+            // {
+            //   DEBUG_VARS(true_dist, dist, eA.transpose(), eB.transpose())
+            // }
+          }
+        }
+      }
+    }
+    // DEBUG_VARS(eAs_new.size(), eBs_new.size())
+    if (pairs.size() == 0)
+    {
+      for (int i = 0; i < eAs.size(); ++i)
+      {
+        const Eigen::Vector3d& eA{ *(eAs[i]) };
+        pairs.push_back({ eA, std::nullopt });
+      }
+      for (int i = 0; i < eBs.size(); ++i)
+      {
+        const Eigen::Vector3d& eB{ *(eBs[i]) };
+        pairs.push_back({ std::nullopt, eB });
+      }
+    }
+
+    return pairs;
+  }
+
   std::vector<estimation::tensegrity_graph_output_t>
-  build_all_graphs(std::array<std::vector<std::optional<Eigen::Vector3d>>, 6>& prop_endcaps)
+  build_all_graphs(std::array<std::vector<RodObservation>, 3>& endcaps_pairs)
   {
     std::vector<estimation::tensegrity_graph_output_t> outputs;
-    _tg_input.add_cable_meassurements = true;
-    _tg_input.cables = std::get<0>(_sensors_callback->back());
+    _tg_input.add_cable_meassurements = false;
+    if (_sensors_callback->size() > 0)
+    {
+      _tg_input.add_cable_meassurements = true;
+      _tg_input.cables = std::get<0>(_sensors_callback->back());
+      // DEBUG_VARS(_tg_input.cables)
+    }
+    _tg_input.init_poses[0] = _poses[0];
+    _tg_input.init_poses[1] = _poses[1];
+    _tg_input.init_poses[2] = _poses[2];
+
+    for (int i = 0; i < endcaps_pairs[0].size(); ++i)
+    {
+      _tg_input.endcaps[0] = endcaps_pairs[0][i].first;
+      _tg_input.endcaps[1] = endcaps_pairs[0][i].second;
+      for (int ii = 0; ii < endcaps_pairs[1].size(); ++ii)
+      {
+        _tg_input.endcaps[2] = endcaps_pairs[1][ii].first;
+        _tg_input.endcaps[3] = endcaps_pairs[1][ii].second;
+        for (int iii = 0; iii < endcaps_pairs[2].size(); ++iii)
+        {
+          _tg_input.endcaps[4] = endcaps_pairs[2][iii].first;
+          _tg_input.endcaps[5] = endcaps_pairs[2][iii].second;
+          _tg_input.idx_major++;
+          const estimation::tensegrity_graph_output_t out{ estimation::create_tensegrity_graph(_tg_input) };
+          if (out.valid)
+          {
+            outputs.push_back(out);
+          }
+        }
+      }
+    }
+    if (_tg_input.add_cable_meassurements)
+      _tg_input.add_between_prior = true;
+
+    return outputs;
+  }
+
+  std::vector<estimation::tensegrity_graph_output_t>
+  build_all_graphs_old(std::array<std::vector<std::optional<Eigen::Vector3d>>, 6>& prop_endcaps)
+  {
+    std::vector<estimation::tensegrity_graph_output_t> outputs;
+    _tg_input.add_cable_meassurements = false;
+    if (_sensors_callback->size() > 0)
+    {
+      _tg_input.add_cable_meassurements = true;
+      _tg_input.cables = std::get<0>(_sensors_callback->back());
+      // DEBUG_VARS(_tg_input.cables)
+    }
+    _tg_input.init_poses[0] = _poses[0];
+    _tg_input.init_poses[1] = _poses[1];
+    _tg_input.init_poses[2] = _poses[2];
     for (int i = 0; i < prop_endcaps[0].size(); ++i)
     {
       _tg_input.endcaps[0] = prop_endcaps[0][i];
@@ -618,13 +821,19 @@ struct traj_estimation_t
               {
                 _tg_input.endcaps[5] = prop_endcaps[5][vi];
                 _tg_input.idx_major++;
-                outputs.push_back(estimation::create_tensegrity_graph(_tg_input));
+                const estimation::tensegrity_graph_output_t out{ estimation::create_tensegrity_graph(_tg_input) };
+                if (out.valid)
+                {
+                  outputs.push_back(out);
+                }
               }
             }
           }
         }
       }
     }
+    _tg_input.add_between_prior = true;
+
     return outputs;
     //   if (endcap_id == 6)
     //     return;
@@ -668,9 +877,9 @@ struct traj_estimation_t
         // estimation::add_to_values(values, key_rotA_offset, gtsam::Rot3());
         // estimation::add_to_values(values, key_rotB_offset, _Roffset.inverse());
 
-        // graph.emplace_shared<EndcapObservationFactor>(key_se3, key_rotA_offset, _endcaps[i], _offset, zvalid_noise);
-        // graph.emplace_shared<EndcapObservationFactor>(key_se3, key_rotB_offset, _endcaps[i + 1], _offset,
-        // zvalid_noise);
+        // graph.emplace_shared<EndcapObservationFactor>(key_se3, key_rotA_offset, _endcaps[i], _offset,
+        // zvalid_noise); graph.emplace_shared<EndcapObservationFactor>(key_se3, key_rotB_offset, _endcaps[i + 1],
+        // _offset, zvalid_noise);
 
         // graph.emplace_shared<RotationOffsetFactor>(key_rotA_offset, key_rotB_offset, _Roffset, rot_prior_nm);
         // graph.emplace_shared<RotationOffsetFactor>(key_rotB_offset, key_rotA_offset, _Roffset, rot_prior_nm);
@@ -788,6 +997,12 @@ struct traj_estimation_t
     else if (_node_status->status() == interface::NodeStatus::RUNNING)
     {
       // publish_estimation();
+      if (_endcaps_q.size() > 0)
+      {
+        process_endcaps(_endcaps_q.front());
+
+        _endcaps_q.pop_front();
+      }
 
       // run_fg();
       // if (visualize)

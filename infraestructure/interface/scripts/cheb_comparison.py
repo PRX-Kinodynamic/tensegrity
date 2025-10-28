@@ -7,6 +7,7 @@ import numpy as np
 import gtsam
 from numpy import linalg as LA
 from interface.cheb_utils import ChebyshevTensegrityPoses
+import yaml
 
 class MocapDataHelper(object):
     def __init__(self, cheb_json):
@@ -31,6 +32,27 @@ class MocapDataHelper(object):
                 if data[di][idx] is not None: 
                     data[di][idx] = self.camera_pose * data[di][idx];
         return data
+
+    def read_camera_param(self, filename):
+        f = open(filename, 'r')
+        cam_params = yaml.load(f, Loader=yaml.FullLoader)
+
+        camera_extrinsic = np.array(cam_params['camera_extrinsics']+[0,0,0,1], np.float32) #: [0.999,0.001,-0.037,0.459,0.0,-1.0,-0.014,0.284,-0.037,0.014,-0.999,1.431]
+        camera_extrinsic = camera_extrinsic.reshape((4, 4))
+        self.camera_pose = gtsam.Pose3(camera_extrinsic);
+
+        c_T_m = np.array(cam_params['camera_Tf_mocap'], np.float32) #: [0.999,0.001,-0.037,0.459,0.0,-1.0,-0.014,0.284,-0.037,0.014,-0.999,1.431]
+        c_T_m = c_T_m.reshape((4, 4))
+        # c_T_m = np.array([[-0.72231893, -0.69031471, 0.04148439, -0.0911841 ], [-0.03982037, -0.01837056, -0.99903797, 2.43988996], [ 0.6904127, -0.72327596, -0.01421918, 0.18661254], [ 0.,     0.,     0.,     1.    ]])
+        # c_T_m = np.array([[-0.71982338, -0.69235535,  0.04998369, -0.09336075], [-0.04100413, -0.02947068, -0.99872426,  2.16381353], [ 0.69294514, -0.72095461, -0.00717574,  0.1893245 ], [ 0.        ,  0.        ,  0.        ,  1.        ]])
+        c_T_m[0:3,0:3] = c_T_m[0:3,0:3].T
+        c_T_m[0:3,3] = -c_T_m[0:3,0:3] @ c_T_m[0:3,3]
+        mocap_tf = camera_extrinsic @ c_T_m
+        self.mocap_pose = gtsam.Pose3(mocap_tf)
+        # print(camera_extrinsic)
+        # print(c_T_m)
+        print(f"mocap_tf {mocap_tf}")
+        f.close();
 
     def mocap_transform(self, data):
         # ptp = self.mocap_tf @ pt + self.offset; 
@@ -216,6 +238,7 @@ if __name__ == '__main__':
     argparse.add_argument('-g', '--gt_filename', help='GT', required=True)
     argparse.add_argument('-e', '--cheb_json', help='Estimation', required=True)
     argparse.add_argument('-o', '--output_prefix', help='Estimation', required=True)
+    argparse.add_argument('-c', '--camera_filename', help='Estimation', required=True)
     # argparse.add_argument('-d', '--npy_dir', help='Estimation', required=True)
 
     args = argparse.parse_args()
@@ -226,6 +249,7 @@ if __name__ == '__main__':
     # npy_dir = args.npy_dir
 
     mdh = MocapDataHelper(cheb_json)
+    mdh.read_camera_param(args.camera_filename)
     # gt_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_gt_250909_232339.txt"
     # gt_filename = "/home/edgar/remotes/perception/tensegrity_ws/data/test/test_gt_250909_162758.txt"
     # estimation_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_estimated_endcap_250909_232345.txt"

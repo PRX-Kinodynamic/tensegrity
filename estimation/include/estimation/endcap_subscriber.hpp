@@ -54,6 +54,11 @@ struct rod_callback_t
     return { {}, {} };  // Pair of empty elements.
   }
 
+  ros::Time get_last_time()
+  {
+    return ti;
+  }
+
   static RodObservation get_observations(interface::TensegrityEndcaps& obs)
   {
     Translation zA, zB;

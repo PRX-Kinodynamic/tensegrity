@@ -84,6 +84,7 @@ private:
 
 #define PRINT_KEYS(...)                                                                                                \
   {                                                                                                                    \
+    using SF = factor_graphs::symbol_factory_t;                                                                        \
     const std::vector<gtsam::Key> _keys{ __VA_ARGS__ };                                                                \
     std::vector<std::string> keys;                                                                                     \
     for (auto _key : _keys)                                                                                            \
@@ -95,6 +96,7 @@ private:
 
 #define PRINT_KEY_CONTAINER(KEYS)                                                                                      \
   {                                                                                                                    \
+    using SF = factor_graphs::symbol_factory_t;                                                                        \
     std::vector<std::string> keys;                                                                                     \
     for (auto _key : KEYS)                                                                                             \
     {                                                                                                                  \

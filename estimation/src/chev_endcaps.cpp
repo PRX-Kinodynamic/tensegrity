@@ -442,113 +442,6 @@ struct chev_estimation_t
 
   void run_fg()
   {
-    // using EndcapObservationFactor = estimation::endcap_observation_factor_t;
-    // using RotationOffsetFactor = estimation::endcap_rotation_offset_factor_t;
-    // using RotationFixIdentity = estimation::rotation_fix_identity_t;
-    // std::array<gtsam::Key, 6> kendcaps;
-
-    // kendcaps[0] = endcap_key(estimation::RodColors::RED, 0);
-    // kendcaps[1] = endcap_key(estimation::RodColors::RED, 1);
-    // kendcaps[2] = endcap_key(estimation::RodColors::GREEN, 0);
-    // kendcaps[3] = endcap_key(estimation::RodColors::GREEN, 1);
-    // kendcaps[4] = endcap_key(estimation::RodColors::BLUE, 0);
-    // kendcaps[5] = endcap_key(estimation::RodColors::BLUE, 1);
-
-    // gtsam::Values values;
-    // gtsam::NonlinearFactorGraph graph;
-
-    // gtsam::Pose3 transform;
-    // const bool tf_received{ _tf_utils->query(transform) };
-    // TENSEGRITY_ASSERT(tf_received, "Transform not available!");
-
-    // auto model = gtsam::noiseModel::Isotropic::Sigma(3, 1e0);
-    // // auto model = gtsam::noiseModel::Diagonal::Sigmas(Eigen::Vector<double, 6>(1, 1, 0, 1, 1, 1));
-    // // _N = endcaps.size() / 2;
-    // // _N = 100;
-    // // _N = 25;
-    // for (int i = 0; i < 6; ++i)
-    // {
-    //   // _chev_mats.push_back();
-    //   values.insert(kendcaps[i], gtsam::ParameterMatrix<3>(_N));
-    // }
-    // // _red_cheb_matrix = gtsam::ParameterMatrix<3>(_N);
-    // // _green_cheb_matrix = gtsam::ParameterMatrix<3>(_N);
-    // // _blue_cheb_matrix = gtsam::ParameterMatrix<3>(_N);
-
-    // // values.insert(kred, _red_cheb_matrix);
-    // // values.insert(kgreen, _green_cheb_matrix);
-    // // values.insert(kblue, _blue_cheb_matrix);
-    // gtsam::noiseModel::Base::shared_ptr cable_noise{ gtsam::noiseModel::Isotropic::Sigma(1, 1e0) };
-
-    // const ros::Time t0{ std::min(timestamps[0], std::get<3>(sensors_callback->at(0))) };
-    // const ros::Time tT{ std::max(timestamps.back(), std::get<3>(sensors_callback->back())) };
-
-    // a = t0.toSec();
-    // b = tT.toSec();
-    // DEBUG_VARS(a, b, _N)
-    // // maxT = (tT - t0).toSec();
-    // for (int i = 0; i < endcaps.size(); ++i)
-    // {
-    //   const double ti{ timestamps[i].toSec() };
-    //   // const double ti{ (timestamps[i] - t0).toSec() };
-    //   for (int j = 0; j < 6; ++j)
-    //   {
-    //     // transform
-    //     const Translation zA{ transform.transformFrom(endcaps[i][j]) };
-    //     graph.emplace_shared<VectorEvaluationFactor>(kendcaps[j], zA, model, _N, ti, a, b);
-    //   }
-    // }
-    // values = _lm_helper->optimize(graph, values, true);
-
-    // // for (int j = 0; j < 9; ++j)
-    // // {
-    // //   const gtsam::Key key_Xi{ kendcaps[cable_map[j].first] };
-    // //   const gtsam::Key key_Xj{ kendcaps[cable_map[j].second] };
-    // //   // DEBUG_VARS(cable_map[j].first, cable_map[j].second);
-    // //   // PRINT_KEYS(key_Xi, key_Xj);
-    // // }
-
-    // for (int i = 0; i < sensors_callback->size(); ++i)
-    // {
-    //   const estimation::sensors_callback_t::Meassurements m{ sensors_callback->at(i) };
-    //   const estimation::sensors_callback_t::Cables& cables{ std::get<0>(m) };
-    //   const ros::Time& tros{ std::get<3>(sensors_callback->at(i)) };
-    //   const double ti{ tros.toSec() };
-    //   // const double ti{ (tros - t0).toSec() };
-    //   int j = 0;
-    //   // DEBUG_VARS(ti, cables.transpose());
-    //   for (; j < 3; ++j)
-    //   {
-    //     const gtsam::Key key_Xi{ kendcaps[cable_map[j].first] };
-    //     const gtsam::Key key_Xj{ kendcaps[cable_map[j].second] };
-
-    //     graph.emplace_shared<cable_length_cheb_factor_t>(key_Xi, key_Xj, cables[j], _N, ti, a, b, cable_noise);
-    //   }
-    //   for (; j < 6; ++j)
-    //   {
-    //     const gtsam::Key key_Xi{ kendcaps[cable_map[j].first] };
-    //     const gtsam::Key key_Xj{ kendcaps[cable_map[j].second] };
-
-    //     graph.emplace_shared<cable_length_cheb_factor_t>(key_Xi, key_Xj, cables[j], _N, ti, a, b, cable_noise);
-    //   }
-    //   for (; j < 9; ++j)
-    //   {
-    //     const gtsam::Key key_Xi{ kendcaps[cable_map[j].first] };
-    //     const gtsam::Key key_Xj{ kendcaps[cable_map[j].second] };
-
-    //     graph.emplace_shared<cable_length_cheb_factor_t>(key_Xi, key_Xj, cables[j], _N, ti, a, b, cable_noise);
-    //   }
-    // }
-
-    // // values.insert(gtsam::Symbol('R', vector_bars.size() - 1), vector_bars.back()[0]);
-    // // values.insert(gtsam::Symbol('G', vector_bars.size() - 1), vector_bars.back()[1]);
-    // // values.insert(gtsam::Symbol('B', vector_bars.size() - 1), vector_bars.back()[2]);
-
-    // result = _lm_helper->optimize(graph, values, true);
-    // for (int i = 0; i < 6; ++i)
-    // {
-    //   _chev_mats.push_back(result.at<gtsam::ParameterMatrix<3>>(kendcaps[i]));
-    // }
     gtsam::Pose3 transform;
     const bool tf_received{ _tf_utils->query(transform) };
     TENSEGRITY_ASSERT(tf_received, "Transform not available!");
@@ -558,6 +451,7 @@ struct chev_estimation_t
     const ros::Time t0{ std::min(timestamps[0], std::get<3>(sensors_callback->at(0))) };
     const ros::Time tT{ std::max(timestamps.back(), std::get<3>(sensors_callback->back())) };
 
+    DEBUG_VARS(timestamps[0], std::get<3>(sensors_callback->at(0)));
     a = t0.toSec();
     b = tT.toSec();
 
@@ -589,7 +483,7 @@ struct chev_estimation_t
 
     // int Nlow{ endcaps_test.size() * 0.1 };   // Start with N <- 10% of test
     // int Nhigh{ endcaps_test.size() * 0.5 };  // High set to 0.5 since its highly unlikely that 50% of data is close
-    // to chev points
+    // DEBUG_VARS(endcaps.size(), endcaps_train.size(), endcaps_test.size())
     int Nstep{ static_cast<int>(endcaps_test.size() * 0.1) };
     int Ni{ Nstep };
     // auto binary_search = [&](int Ni, int Nlow, int Nhigh) {
@@ -611,6 +505,10 @@ struct chev_estimation_t
       curr_err = evaluate_estimation(endcaps_test, timestamps_test, curr_cheb_mats, Ni, a, b);
       if (prev_err > curr_err)
       {
+        if (std::fabs(prev_err - curr_err) < 0.001)
+        {
+          Nstep++;
+        }
         prev_err = curr_err;
         _chev_mats.swap(curr_cheb_mats);
         _N = Ni;
@@ -897,10 +795,15 @@ struct chev_estimation_t
 
   void bar_callback(const interface::TensegrityEndcapsConstPtr msg)
   {
+    if (msg->header.stamp.isZero())
+      return;
     if (t0.isZero())
     {
       t0 = msg->header.stamp;
     }
+
+    // const std::string timestamp{ tensegrity::utils::convert_to<std::string>(msg->header.stamp) };
+    // DEBUG_VARS(timestamp);
     endcaps.emplace_back();
     timestamps.emplace_back(msg->header.stamp);
     for (int i = 0; i < 6; ++i)
