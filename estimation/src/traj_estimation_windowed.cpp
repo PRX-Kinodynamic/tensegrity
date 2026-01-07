@@ -32,6 +32,7 @@
 #include <estimation/SE3_observation_factor.hpp>
 #include <estimation/cable_sensor_subscriber.hpp>
 #include <estimation/sensors_subscriber.hpp>
+#include <tensegrity_utils/time_meassurement.hpp>
 
 #include <gtsam/slam/BetweenFactor.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
@@ -122,11 +123,12 @@ struct traj_estimation_t
   double _traj_ti;
   int _state_idx;
   int _rot_idx;
-  std::vector<std::string> initial_endcaps_params;
+  std::vector<std::string> initial_endcaps_params, initial_poses_params;
   std::array<gtsam::Pose3, 3> _poses;
   std::array<Eigen::Vector3d, 6> _endcaps;
   std::array<bool, 6> _endcaps_valid;
   std::array<gtsam::JacobianFactor::shared_ptr, 6> _endcap_priors;
+  tensegrity::utils::time_meassurement_t time_meas;
 
   ros::Time _prev_stamp;
   estimation::tensegrity_graph_inputs_t _tg_input;
@@ -174,6 +176,7 @@ struct traj_estimation_t
     bool use_cable_sensors{ true };
     double trajectory_pub_frequency;
     double frequency{ 30 };
+    int queue_size{ 10 };
 
     PARAM_SETUP(nh, visualize);
     PARAM_SETUP(nh, tensegrity_pose_topic)
@@ -181,7 +184,9 @@ struct traj_estimation_t
     PARAM_SETUP(nh, tensegrity_endcaps_topic);
     PARAM_SETUP(nh, estimated_endcaps_topic);
     PARAM_SETUP(nh, initial_endcaps_params);
+    PARAM_SETUP(nh, initial_poses_params);
     PARAM_SETUP(nh, poses_filename);
+    PARAM_SETUP_WITH_DEFAULT(nh, queue_size, queue_size)
     PARAM_SETUP_WITH_DEFAULT(nh, frequency, frequency);
     PARAM_SETUP_WITH_DEFAULT(nh, window_dt, window_dt);
     PARAM_SETUP_WITH_DEFAULT(nh, window_size, window_size);
@@ -195,7 +200,7 @@ struct traj_estimation_t
 
     _node_status = interface::node_status_t::create(nh, false);
 
-    _endcaps_subscriber = nh.subscribe(tensegrity_endcaps_topic, 1, &This::endcaps_callback, this);
+    _endcaps_subscriber = nh.subscribe(tensegrity_endcaps_topic, queue_size, &This::endcaps_callback, this);
     _sensors_callback = std::make_shared<estimation::sensors_callback_t>(nh);
     const ros::Duration timer(1.0 / frequency);
     _timer = nh.createTimer(timer, &This::timer_callback, this);
@@ -213,53 +218,11 @@ struct traj_estimation_t
     // blue_rod = std::make_shared<rod_callback_t>(nh, blue_endcaps_topic);
     // green_rod = std::make_shared<rod_callback_t>(nh, green_endcaps_topic);
 
-    // cables_callback = std::make_shared<estimation::cables_callback_t>(nh, cables_topic);
-
-    // // const gtsam::Key key_Xred0{ rod_symbol(estimation::RodColors::RED, rod_idx) };
-    // // values.insert(key_Xred0, factor_graphs::random<SE3>());
-
-    // const ros::Duration graph_timer(1.0 / optimization_frequency);
-    // const ros::Duration publisher_timer(1.0 / publisher_frequency);
-    // const ros::Duration traj_pub_timer(1.0 / trajectory_pub_frequency);
-    // // ros::Subscriber sub = n.subscribe<sensor_msgs::Image> ("image_topic", 10,
-    // //                                boost::bind(processImagecallback, _1, argc, argv) );
-    // // _red_subscriber = nh.subscribe<interface::TensegrityEndcaps>(
-    // //     red_endcaps_topic, 1, boost::bind(boost::mem_fn(&This::endcap_callback), this, _1,
-    // //     estimation::RodColors::RED));
-    // // &This::endcap_callback, this);
-    // // _green_subscriber = nh.subscribe(blue_endcaps_topic, 1, &This::endcap_callback, this);
-    // // _blue_subscriber = nh.subscribe(green_endcaps_topic, 1, &This::endcap_callback, this);
-
-    // _tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
-
     for (int i = 0; i < 6; ++i)
     {
       const std::string topicname{ "/tensegrity/endcaps/traj/" + std::to_string(i) };
       _endcaps_pubs[i] = nh.advertise<visualization_msgs::Marker>(topicname, 1, true);
     }
-    // _traj_pub_timer = nh.createTimer(traj_pub_timer, &This::publish_trajectory, this);
-    // _graph_timer = nh.createTimer(graph_timer, &This::update, this);
-    // _publisher_timer = nh.createTimer(publisher_timer, &This::publish_pose, this);
-
-    // prev_timepoint = ros::Time::now();
-
-    // const gtsam::Values result{ estimation::compute_initialization(initial_estimate_filename, _offset, _Roffset) };
-
-    // const gtsam::Key key_red_0{ estimation::rod_symbol(estimation::RodColors::RED, _idx, 0) };
-    // const gtsam::Key key_green_0{ estimation::rod_symbol(estimation::RodColors::GREEN, _idx, 0) };
-    // const gtsam::Key key_blue_0{ estimation::rod_symbol(estimation::RodColors::BLUE, _idx, 0) };
-
-    // values.insert(key_red_0, result.at<SE3>(key_red_0));
-    // values.insert(key_green_0, result.at<SE3>(key_green_0));
-    // values.insert(key_blue_0, result.at<SE3>(key_blue_0));
-
-    // graph.addPrior(key_red_0, result.at<SE3>(key_red_0));
-    // graph.addPrior(key_green_0, result.at<SE3>(key_green_0));
-    // graph.addPrior(key_blue_0, result.at<SE3>(key_blue_0));
-
-    // add_new_step();
-
-    // _node_status->status(interface::NodeStatus::READY);
   }
 
   ~traj_estimation_t()
@@ -268,9 +231,11 @@ struct traj_estimation_t
     // node_status->status(interface::NodeStatus::STOPPED);
     // ros::Duration(1.0).sleep();
   }
+
   void init_endcaps()
   {
     bool all_endcaps_received{ true };
+    bool all_poses_received{ true };
 
     for (int i = 0; i < initial_endcaps_params.size(); ++i)
     {
@@ -284,35 +249,50 @@ struct traj_estimation_t
         _endcaps_valid[i] = true;
       }
     }
-
-    if (all_endcaps_received)
+    for (int i = 0; i < initial_poses_params.size(); ++i)
     {
-      gtsam::noiseModel::Isotropic::shared_ptr z0_noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-3) };
-      for (int i = 0; i < 6; ++i)
+      std::vector<double> params_in;
+      all_poses_received &= tensegrity::utils::param_check_then_get(initial_poses_params[i], params_in);
+      // DEBUG_VARS(i, all_endcaps_received)
+
+      if (all_poses_received)
       {
-        gtsam::Ordering key_ordering;
-        gtsam::Key key{ estimation::endcap_symbol(i / 2, 0, i) };
-
-        key_ordering += key;
-
-        gtsam::Values values;
-        gtsam::GaussianFactorGraph linearFactorGraph;
-
-        values.insert(key, _endcaps[i]);
-        // linearFactorGraph.push_back(prior);
-        const gtsam::PriorFactor<Eigen::Vector3d> init_prior(key, _endcaps[i], z0_noise);
-        linearFactorGraph.push_back(init_prior.linearize(values));
-        const gtsam::GaussianConditional::shared_ptr marginal{
-          linearFactorGraph.marginalMultifrontalBayesNet(key_ordering)->front()
-        };
-        const gtsam::VectorValues result{ marginal->solve(gtsam::VectorValues()) };
-
-        _endcap_priors[i] = boost::make_shared<gtsam::JacobianFactor>(
-            marginal->keys().front(), marginal->getA(marginal->begin()),
-            marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
+        gtsam::Quaternion quat(params_in[0], params_in[1], params_in[2], params_in[3]);
+        Eigen::Vector3d t{ params_in[4], params_in[5], params_in[6] };
+        _poses[i] = gtsam::Pose3(gtsam::Rot3(quat), t);
       }
+    }
 
-      // publish_estimation();
+    // if (all_endcaps_received)
+    // {
+    //   gtsam::noiseModel::Isotropic::shared_ptr z0_noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-3) };
+    //   for (int i = 0; i < 6; ++i)
+    //   {
+    //     gtsam::Ordering key_ordering;
+    //     gtsam::Key key{ estimation::endcap_symbol(i / 2, 0, i) };
+
+    //     key_ordering += key;
+
+    //     gtsam::Values values;
+    //     gtsam::GaussianFactorGraph linearFactorGraph;
+
+    //     values.insert(key, _endcaps[i]);
+    //     // linearFactorGraph.push_back(prior);
+    //     const gtsam::PriorFactor<Eigen::Vector3d> init_prior(key, _endcaps[i], z0_noise);
+    //     linearFactorGraph.push_back(init_prior.linearize(values));
+    //     const gtsam::GaussianConditional::shared_ptr marginal{
+    //       linearFactorGraph.marginalMultifrontalBayesNet(key_ordering)->front()
+    //     };
+    //     const gtsam::VectorValues result{ marginal->solve(gtsam::VectorValues()) };
+
+    //     _endcap_priors[i] = boost::make_shared<gtsam::JacobianFactor>(
+    //         marginal->keys().front(), marginal->getA(marginal->begin()),
+    //         marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
+    //   }
+
+    // publish_estimation();
+    if (all_poses_received)
+    {
       _node_status->status(interface::NodeStatus::RUNNING);
     }
   }
@@ -413,8 +393,7 @@ struct traj_estimation_t
     _endcaps_q.emplace_back(*msg);
     // process_endcaps(*msg);
     // const std::string traj_timestamp{ tensegrity::utils::convert_to<std::string>(msg->header.stamp) };
-    // DEBUG_VARS(traj_timestamp)
-    // select_endcaps(*msg);
+    // DEBUG_VARS(traj_timestamp, msg->endcaps.size())
   }
 
   void process_endcaps(const interface::TensegrityEndcaps& endcaps_new)
@@ -439,6 +418,7 @@ struct traj_estimation_t
       // prop_endcaps[2 * id].push_back(e_new);
       // prop_endcaps[2 * id + 1].push_back(e_new);
     }
+
     for (int i = 0; i < 6; ++i)
     {
       _tg_input.noise_models[i] = gtsam::noiseModel::Isotropic::Sigma(3, 1e-2);
@@ -482,7 +462,6 @@ struct traj_estimation_t
     // DEBUG_VARS(prop_endcaps[5].size());
 
     const double z_dt{ _prev_stamp.isZero() ? 1.0 : (endcaps_new.header.stamp - _prev_stamp).toSec() };
-    _prev_stamp = endcaps_new.header.stamp;
 
     // Cap this to 100Hz. Necessary in case the stamp is not updated (sim) and dt is 0
     _tg_input.btw_noise = gtsam::noiseModel::Isotropic::Sigma(6, std::max(z_dt, 0.01));
@@ -493,6 +472,12 @@ struct traj_estimation_t
     gtsam::Values values;
     gtsam::NonlinearFactorGraph graph;
 
+    if (outputs.size() == 0)
+    {
+      PRINT_MSG("No graphs!")
+      return;
+    }
+    _prev_stamp = endcaps_new.header.stamp;
     for (auto& out : outputs)
     {
       values.insert(out.values);
@@ -537,7 +522,7 @@ struct traj_estimation_t
     _endcaps[4] = _poses[2] * (res.at<gtsam::Rot3>(outputs[min_idx].keys_rotA[2]) * _offset);
     _endcaps[5] = _poses[2] * (res.at<gtsam::Rot3>(outputs[min_idx].keys_rotB[2]) * _offset);
 
-    publish_estimation();
+    // publish_estimation();
 
     const std::string red_str{ tensegrity::utils::convert_to<std::string>(_poses[0]) };
     const std::string green_str{ tensegrity::utils::convert_to<std::string>(_poses[1]) };
@@ -545,6 +530,7 @@ struct traj_estimation_t
 
     const int seq{ static_cast<int>(endcaps_new.header.seq) };
     // const double timestamp{ endcaps_new.header.stamp.toSec() };
+    const std::string timestamp_now{ tensegrity::utils::convert_to<std::string>(ros::Time::now()) };
     const std::string timestamp{ tensegrity::utils::convert_to<std::string>(_prev_stamp) };
 
     _poses_file << seq << " ";
@@ -552,6 +538,7 @@ struct traj_estimation_t
     _poses_file << red_str << " ";
     _poses_file << green_str << " ";
     _poses_file << blue_str << " ";
+    _poses_file << timestamp_now << " ";
     _poses_file << "\n";
   }
 
@@ -578,91 +565,91 @@ struct traj_estimation_t
     }
   }
 
-  void select_endcaps(const interface::TensegrityEndcaps& endcaps_new)
-  {
-    gtsam::noiseModel::Isotropic::shared_ptr z0_noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-2) };
-    Eigen::Vector3d e_new;
-    std::array<std::vector<Eigen::Vector3d>, 3> endcaps_prop;
-    // interface::TensegrityEndcaps endcaps_other;
-    std::array<std::vector<Eigen::Vector3d>, 6> rejected;
-    std::array<std::set<int>, 3> accepted;
-    for (int i = 0; i < endcaps_new.endcaps.size(); ++i)
-    {
-      int id{ endcaps_new.ids[i] };
-      interface::copy(e_new, endcaps_new.endcaps[i]);
-      endcaps_prop[id].push_back(e_new);
-    }
+  // void select_endcaps(const interface::TensegrityEndcaps& endcaps_new)
+  // {
+  //   gtsam::noiseModel::Isotropic::shared_ptr z0_noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-2) };
+  //   Eigen::Vector3d e_new;
+  //   std::array<std::vector<Eigen::Vector3d>, 3> endcaps_prop;
+  //   // interface::TensegrityEndcaps endcaps_other;
+  //   std::array<std::vector<Eigen::Vector3d>, 6> rejected;
+  //   std::array<std::set<int>, 3> accepted;
+  //   for (int i = 0; i < endcaps_new.endcaps.size(); ++i)
+  //   {
+  //     int id{ endcaps_new.ids[i] };
+  //     interface::copy(e_new, endcaps_new.endcaps[i]);
+  //     endcaps_prop[id].push_back(e_new);
+  //   }
 
-    for (int i = 0; i < 6; ++i)
-    {
-      _endcaps_valid[i] = false;
-      const Eigen::Vector3d e_prev{ _endcaps[i] };
-      const gtsam::Key key{ estimation::endcap_symbol(i / 2, 0, i) };
-      gtsam::Ordering key_ordering;
+  //   for (int i = 0; i < 6; ++i)
+  //   {
+  //     _endcaps_valid[i] = false;
+  //     const Eigen::Vector3d e_prev{ _endcaps[i] };
+  //     const gtsam::Key key{ estimation::endcap_symbol(i / 2, 0, i) };
+  //     gtsam::Ordering key_ordering;
 
-      key_ordering += key;
+  //     key_ordering += key;
 
-      gtsam::Values values;
+  //     gtsam::Values values;
 
-      values.insert(key, _endcaps[i]);
-      double prev_error{ 1000 };
-      gtsam::JacobianFactor::shared_ptr next_prior{ nullptr };
-      for (int j = 0; j < endcaps_prop[i / 2].size(); ++j)
-      {
-        e_new = endcaps_prop[i / 2][j];
+  //     values.insert(key, _endcaps[i]);
+  //     double prev_error{ 1000 };
+  //     gtsam::JacobianFactor::shared_ptr next_prior{ nullptr };
+  //     for (int j = 0; j < endcaps_prop[i / 2].size(); ++j)
+  //     {
+  //       e_new = endcaps_prop[i / 2][j];
 
-        gtsam::GaussianFactorGraph linearFactorGraph;
-        linearFactorGraph.push_back(_endcap_priors[i]);
-        const gtsam::PriorFactor<Eigen::Vector3d> init_prior(key, e_new, z0_noise);
-        linearFactorGraph.push_back(init_prior.linearize(values));
-        const gtsam::GaussianConditional::shared_ptr marginal{
-          linearFactorGraph.marginalMultifrontalBayesNet(key_ordering)->front()
-        };
-        const gtsam::VectorValues result{ marginal->solve(gtsam::VectorValues()) };
-        const double error{ linearFactorGraph.error(result) };
+  //       gtsam::GaussianFactorGraph linearFactorGraph;
+  //       linearFactorGraph.push_back(_endcap_priors[i]);
+  //       const gtsam::PriorFactor<Eigen::Vector3d> init_prior(key, e_new, z0_noise);
+  //       linearFactorGraph.push_back(init_prior.linearize(values));
+  //       const gtsam::GaussianConditional::shared_ptr marginal{
+  //         linearFactorGraph.marginalMultifrontalBayesNet(key_ordering)->front()
+  //       };
+  //       const gtsam::VectorValues result{ marginal->solve(gtsam::VectorValues()) };
+  //       const double error{ linearFactorGraph.error(result) };
 
-        // DEBUG_VARS(i, error, e_prev.transpose(), e_new.transpose());
-        if (error < 10.597 and error < prev_error)
-        {
-          prev_error = error;
-          _endcaps[i] = e_new;
-          _endcaps_valid[i] = true;
-          accepted[i / 2].insert(j);
+  //       // DEBUG_VARS(i, error, e_prev.transpose(), e_new.transpose());
+  //       if (error < 10.597 and error < prev_error)
+  //       {
+  //         prev_error = error;
+  //         _endcaps[i] = e_new;
+  //         _endcaps_valid[i] = true;
+  //         accepted[i / 2].insert(j);
 
-          next_prior = boost::make_shared<gtsam::JacobianFactor>(
-              marginal->keys().front(), marginal->getA(marginal->begin()),
-              marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
-        }
-        // else
-        // {
-        //   // endcaps_other.endcaps.push_back(endcaps_new.endcaps[j]);
-        //   rejected[i].emplace_back(e_new);
-        // }
-      }
+  //         next_prior = boost::make_shared<gtsam::JacobianFactor>(
+  //             marginal->keys().front(), marginal->getA(marginal->begin()),
+  //             marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
+  //       }
+  //       // else
+  //       // {
+  //       //   // endcaps_other.endcaps.push_back(endcaps_new.endcaps[j]);
+  //       //   rejected[i].emplace_back(e_new);
+  //       // }
+  //     }
 
-      if (next_prior)
-      {
-        _endcap_priors[i] = next_prior;
-      }
-    }
+  //     if (next_prior)
+  //     {
+  //       _endcap_priors[i] = next_prior;
+  //     }
+  //   }
 
-    for (int i = 0; i < 6; ++i)
-    {
-      if (_endcaps_valid[i])
-        continue;
-      for (int j = 0; j < endcaps_prop[i / 2].size(); ++j)
-      {
-        if (accepted[i / 2].count(j))
-          continue;
+  //   for (int i = 0; i < 6; ++i)
+  //   {
+  //     if (_endcaps_valid[i])
+  //       continue;
+  //     for (int j = 0; j < endcaps_prop[i / 2].size(); ++j)
+  //     {
+  //       if (accepted[i / 2].count(j))
+  //         continue;
 
-        rejected[i].emplace_back(endcaps_prop[i / 2][j]);
-      }
-      // DEBUG_VARS(rejected[i])
-    }
-    recover_endcaps(rejected);
+  //       rejected[i].emplace_back(endcaps_prop[i / 2][j]);
+  //     }
+  //     // DEBUG_VARS(rejected[i])
+  //   }
+  //   recover_endcaps(rejected);
 
-    // publish_estimation();
-  }
+  //   // publish_estimation();
+  // }
 
   void recover_endcaps(std::array<std::vector<Eigen::Vector3d>, 6>& prop_endcaps)
   {
@@ -993,15 +980,20 @@ struct traj_estimation_t
     if (_node_status->status() == interface::NodeStatus::PREPARING)
     {
       init_endcaps();
+      // publish_estimation();
     }
     else if (_node_status->status() == interface::NodeStatus::RUNNING)
     {
       // publish_estimation();
       if (_endcaps_q.size() > 0)
       {
+        // DEBUG_PRINT
+        // time_meas("proc", false);
         process_endcaps(_endcaps_q.front());
+        // time_meas("proc", true);
 
         _endcaps_q.pop_front();
+        publish_estimation();
       }
 
       // run_fg();

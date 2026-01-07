@@ -9,6 +9,10 @@ class ChebyshevTensegrityPoses:
         f = open(json_file, 'r')
         j = json.load(f)
         self.matrices = [None]*3
+        if '0' not in j:
+            self.valid = False
+            return
+        self.valid = True
 
         self.matrices[0] = np.array(j['0'])
         self.matrices[1] = np.array(j['1'])
@@ -19,7 +23,7 @@ class ChebyshevTensegrityPoses:
         self.b = float(j['b'])
         self.offset = np.array(j['offset'])
 
-        print(f"a {self.a} b {self.b}")
+        # print(f"a {self.a} b {self.b}")
     # Convert to [a,b] to [-1,1]
     def scale(self, x):
         t1 = -1.0

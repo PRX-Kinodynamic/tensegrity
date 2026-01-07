@@ -24,6 +24,7 @@ class MocapDataHelper(object):
         self.mocap_pose = gtsam.Pose3(mocap_tf)
         self.offset = np.array([0, 0, 0.325 / 2.0 ]);
         self.cheb = ChebyshevTensegrityPoses(cheb_json)
+        
         # self.offset = np.array([0.572, -0.050, 1.000, 0])
 
     def camera_transform(self, data):
@@ -276,14 +277,14 @@ if __name__ == '__main__':
     all_errors_cm = []
     angle_errs = []
     # for file in os.listdir(directory):
-    for idx in range(25, 50):
+    for idx in range(25, 49):
         gt_file = directory + f"/traj_{idx}.txt"
         cheb_file = directory + f"/traj_{idx}_cheb_endcaps_bars.json"
         if not os.path.isfile(gt_file) and not os.path.isfile(cheb_file):
             print(f"File [{idx}] does not exists")
             continue;
-        print(f"gt_file: {gt_file}")
-        print(f"cheb_file: {cheb_file}")
+        # print(f"gt_file: {gt_file}")
+        # print(f"cheb_file: {cheb_file}")
         gt_size = os.path.getsize(gt_file)
         cheb_size = os.path.getsize(cheb_file)
         if gt_size == 0 or cheb_size == 0:

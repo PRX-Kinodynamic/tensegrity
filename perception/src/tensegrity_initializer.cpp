@@ -247,7 +247,7 @@ struct tensegrity_initializer_t
       // const Eigen::Vector4d pt1{ Eigen::Vector4d(zi[0], zi[1], zi[2], 1.0) };
       // DEBUG_VARS(zi.transpose())
       zi = _camera_interface->camera()->pose() * zi;
-      // DEBUG_VARS(zi.transpose())
+      DEBUG_VARS(zi.transpose())
     }
 
     gtsam::Values values;

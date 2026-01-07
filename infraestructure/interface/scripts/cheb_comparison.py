@@ -161,7 +161,10 @@ class MocapDataHelper(object):
         all_errors = []
         all_errors_cm = []
         angle_errs = []
+        rot_symmetry = gtsam.Pose3(gtsam.Rot3(0.0, 0.0, 1.0, 0.0),[0.0, 0.0, 0.0]) ;
         for gt_ti in gt_data:
+            if not self.cheb.valid:
+                break;
             angles = []
             error = []
             error_cm = []
@@ -171,11 +174,18 @@ class MocapDataHelper(object):
             for z, gt in zip([p0, p1, p2], poses_gts):
                 if gt is not None:
                     # print(f"gt {gt}")
-                    err = np.abs(gtsam.Pose3.Logmap(gt.between(z)))
+                    # err = np.abs(gtsam.Pose3.Logmap(gt.between(z)))
+                    err0 = np.abs(gtsam.Pose3.Logmap(gt.between(z)))
+                    err1 = np.abs(gtsam.Pose3.Logmap(gt.between(z * rot_symmetry )))
+                    if LA.norm(err0) < LA.norm(err1):
+                        angles.append(self.angle_err(gt, z));
+                        error.append(err0)
+                    else:
+                        angles.append(self.angle_err(gt, z * rot_symmetry));
+                        error.append(err1)
                     err_cm = np.abs(gt.translation() - z.translation())
-                    error.append(err)
+                    # error.append(err)
                     error_cm.append(err_cm)
-                    angles.append(self.angle_err(gt, z));
                 else:
                     error.append(np.array([np.nan]*6))
                     error_cm.append(np.array([np.nan]*3))
@@ -189,12 +199,20 @@ class MocapDataHelper(object):
         all_errors_cm = np.array(all_errors_cm)
         angle_errs = np.array(angle_errs)
 
-        mean_err = np.nanmean(all_errors, axis=(0,1))
-        stdd_err = np.nanstd(all_errors, axis=(0,1))
-        mean_err_cm = np.nanmean(all_errors_cm, axis=(0,1))
-        stdd_err_cm = np.nanstd(all_errors_cm, axis=(0,1))
-        mean_angle_errs = np.nanmean(angle_errs, axis=(0,1))
-        stdd_angle_errs = np.nanstd(angle_errs, axis=(0,1))
+        if not self.cheb.valid:
+            mean_err = []
+            stdd_err = []
+            mean_err_cm = []
+            stdd_err_cm = []
+            mean_angle_errs = []
+            stdd_angle_errs = []
+        else:
+            mean_err = np.nanmean(all_errors, axis=(0,1))
+            stdd_err = np.nanstd(all_errors, axis=(0,1))
+            mean_err_cm = np.nanmean(all_errors_cm, axis=(0,1))
+            stdd_err_cm = np.nanstd(all_errors_cm, axis=(0,1))
+            mean_angle_errs = np.nanmean(angle_errs, axis=(0,1))
+            stdd_angle_errs = np.nanstd(angle_errs, axis=(0,1))
             
         print(f"mean_err {mean_err}\n stdd_err {stdd_err}\n mean_angle_errs {mean_angle_errs}")
         all_errors_file = open(filename_prefix + "_all_errors.txt", 'w');
@@ -249,11 +267,14 @@ if __name__ == '__main__':
     # npy_dir = args.npy_dir
 
     mdh = MocapDataHelper(cheb_json)
+
     mdh.read_camera_param(args.camera_filename)
     # gt_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_gt_250909_232339.txt"
     # gt_filename = "/home/edgar/remotes/perception/tensegrity_ws/data/test/test_gt_250909_162758.txt"
     # estimation_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_estimated_endcap_250909_232345.txt"
     gt_data = mdh.read_poses_data(gt_filename);
+    # if not self.cheb.valid:
+        # mdh.compute_errors(gt_data, output_prefix )
     # z_data = mdh.read_poses_data(estimation_filename);
     # old_data = mdh.read_from_npy(npy_dir)
 

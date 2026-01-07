@@ -65,18 +65,18 @@ private:
 
     // DEBUG_VARS(filters_namespace)
     ros::NodeHandle nh_param(filters_namespace);
-    std::vector<double> low;
-    std::vector<double> high;
-    PARAM_SETUP(nh_param, low);
-    PARAM_SETUP(nh_param, high);
+    // std::vector<double> low;
+    // std::vector<double> high;
+    // PARAM_SETUP(nh_param, low);
+    // PARAM_SETUP(nh_param, high);
 
-    // DEBUG_VARS(low, high)
-    _low_H = low[0];
-    _low_S = low[1];
-    _low_V = low[2];
-    _high_H = high[0];
-    _high_S = high[1];
-    _high_V = high[2];
+    // // DEBUG_VARS(low, high)
+    // _low_H = low[0];
+    // _low_S = low[1];
+    // _low_V = low[2];
+    // _high_H = high[0];
+    // _high_S = high[1];
+    // _high_V = high[2];
 
     const std::string name{ this->getName() };
     ros::NodeHandle nh1(private_nh, name);

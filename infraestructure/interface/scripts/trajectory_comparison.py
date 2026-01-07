@@ -177,7 +177,7 @@ class MocapDataHelper(object):
                 all_errors.append(np.array(error))
                 all_errors_cm.append(np.array(error_cm))
             else:
-                # print(f"missed: {gt_idx}")
+                print(f"missed: {gt_idx}")
                 missed_frames += 1
         all_errors = np.array(all_errors)
         all_errors_cm = np.array(all_errors_cm)
@@ -232,7 +232,7 @@ if __name__ == '__main__':
     argparse.add_argument('-e', '--estimation_filename', help='Estimation', required=True)
     argparse.add_argument('-o', '--output_prefix', help='Estimation', required=True)
     argparse.add_argument('-c', '--camera_filename', help='Estimation', required=True)
-    # argparse.add_argument('-d', '--npy_dir', help='Estimation', required=True)
+    argparse.add_argument('-d', '--npy_dir', help='Estimation', required=True)
 
     args = argparse.parse_args()
 
@@ -251,8 +251,8 @@ if __name__ == '__main__':
     # gt_filename = "/home/edgar/remotes/perception/tensegrity_ws/data/test/test_gt_250909_162758.txt"
     # estimation_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_estimated_endcap_250909_232345.txt"
     gt_data = mdh.read_poses_data(gt_filename);
-    z_data = mdh.read_poses_data(estimation_filename);
-    # old_data = mdh.read_from_npy(npy_dir)
+    # z_data = mdh.read_poses_data(estimation_filename);
+    old_data = mdh.read_from_npy(npy_dir)
 
     # assert len(gt_data) == len(z_data), "Sizes not match!"
     # assert len(gt_data) == len(old_data), "Sizes not match!"

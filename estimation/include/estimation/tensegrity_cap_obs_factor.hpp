@@ -1140,6 +1140,11 @@ public:
   {
   }
 
+  virtual bool active(const gtsam::Values& values) const override
+  {
+    return not std::isnan(_zij);
+  }
+
   static Meassurement predict(const SE3& xi, const SE3& xj, const Rotation& Ri, const Rotation& Rj,
                               const Translation& offset,  // no-lint
                               gtsam::OptionalJacobian<1, 6> Hxi = boost::none,

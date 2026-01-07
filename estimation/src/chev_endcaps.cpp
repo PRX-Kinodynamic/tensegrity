@@ -95,6 +95,11 @@ public:
   {
   }
 
+  virtual bool active(const gtsam::Values& values) const override
+  {
+    return not std::isnan(_zij[0]);
+  }
+
   static Meassurement predict(const ParameterMatrix& pmi, const ParameterMatrix& pmj,  // no-lint
                               ChebClass::VectorEvaluationFunctor<3> func,              // no-lint
                               gtsam::OptionalJacobian<-1, -1> Hpmi = boost::none,
@@ -247,7 +252,10 @@ struct chev_estimation_t
   {
     // lm_params.setVerbosityLM("SILENT");
     _lm_params.setVerbosityLM("SUMMARY");
-    _lm_params.setMaxIterations(10);
+    _lm_params.setRelativeErrorTol(1e-3);
+    _lm_params.setAbsoluteErrorTol(1e-3);
+    _lm_params.setErrorTol(1e-3);
+    _lm_params.setMaxIterations(50);
     _lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/state_estimation/fg", _lm_params);
 
     std::string tensegrity_bars_topicname;
@@ -396,7 +404,7 @@ struct chev_estimation_t
     {
       gtsam::LevenbergMarquardtParams lm_params;
       lm_params.setVerbosityLM("SILENT");
-      lm_params.setMaxIterations(1);
+      lm_params.setMaxIterations(1);  // One iteration is needed to avoid 0 dist -> Inf jacobian.
       values = lm_helper->optimize(graph, values, true, lm_params);
       for (int i = 0; i < sensors->size(); ++i)
       {
@@ -483,9 +491,9 @@ struct chev_estimation_t
 
     // int Nlow{ endcaps_test.size() * 0.1 };   // Start with N <- 10% of test
     // int Nhigh{ endcaps_test.size() * 0.5 };  // High set to 0.5 since its highly unlikely that 50% of data is close
-    // DEBUG_VARS(endcaps.size(), endcaps_train.size(), endcaps_test.size())
-    int Nstep{ static_cast<int>(endcaps_test.size() * 0.1) };
+    int Nstep{ std::max(static_cast<int>(endcaps_test.size() * 0.2), 2) };
     int Ni{ Nstep };
+    DEBUG_VARS(Nstep, endcaps.size(), endcaps_train.size(), endcaps_test.size())
     // auto binary_search = [&](int Ni, int Nlow, int Nhigh) {
     //   _chev_mats = estimate_endcap_trajectory(Ni, endcaps_train, timestamps_train, sensors_callback, cable_map,
     //                                           _lm_helper, a, b);
@@ -625,6 +633,12 @@ struct chev_estimation_t
 
       // curr_cheb_mats.push_back(_chev_bars_mats[0]);
       succeded = compute_envelope(curr_cheb_mats, _Nbars);
+      if (_Nbars > endcaps.size())
+      {
+        PRINT_MSG("Cheb failed")
+        break;
+        // success = true;
+      }
     }
   }
 
@@ -669,10 +683,10 @@ struct chev_estimation_t
         break;
       }
     }
-    if (Nnew > endcaps.size())
-    {
-      success = true;
-    }
+    // if (Nnew > endcaps.size())
+    // {
+    //   success = true;
+    // }
     // // Block of size (p,q), starting at (i,j)  matrix.block(i,j,p,q);
     if (success)
     {
@@ -718,76 +732,80 @@ struct chev_estimation_t
     }
     if (not fg_not_run)
     {
-      for (double ti = a; ti < b; ti += 0.1)
+      if (_chev_bars_mats.size() >= 3)
       {
-        const ChebClass::VectorEvaluationFunctor<3> f(_N, ti, a, b);
-        const gtsam::Chebyshev2Basis::ManifoldEvaluationFunctor<SE3> f_se3(_Nbars, ti, a, b);
-        // const Eigen::Vector3d red_endcap{ f(_red_cheb_matrix) };
-        // const Eigen::Vector3d green_endcap{ f(_green_cheb_matrix) };
-        // const Eigen::Vector3d blue_endcap{ f(_blue_cheb_matrix) };
+        for (double ti = a; ti < b; ti += 0.1)
+        {
+          const ChebClass::VectorEvaluationFunctor<3> f(_N, ti, a, b);
+          const gtsam::Chebyshev2Basis::ManifoldEvaluationFunctor<SE3> f_se3(_Nbars, ti, a, b);
+          // const Eigen::Vector3d red_endcap{ f(_red_cheb_matrix) };
+          // const Eigen::Vector3d green_endcap{ f(_green_cheb_matrix) };
+          // const Eigen::Vector3d blue_endcap{ f(_blue_cheb_matrix) };
+
+          for (int i = 0; i < 6; ++i)
+          {
+            const Eigen::Vector3d curr_endcap{ f(_chev_mats[i]) };
+            // DEBUG_VARS(_N, ti, maxT, curr_endcap.transpose());
+            _markers[i].points.emplace_back();
+            _markers[i].points.back().x = curr_endcap[0];
+            _markers[i].points.back().y = curr_endcap[1];
+            _markers[i].points.back().z = curr_endcap[2];
+          }
+
+          for (int i = 0; i < 3; ++i)
+          {
+            const gtsam::Pose3 curr_xi{ f_se3(_chev_bars_mats[i]) };
+
+            const Translation pti{ curr_xi.translation() };
+            _bars_markers[i].points.emplace_back();
+            _bars_markers[i].points.back().x = pti[0];
+            _bars_markers[i].points.back().y = pti[1];
+            _bars_markers[i].points.back().z = pti[2];
+          }
+
+          // _poses_file << "\n";
+          // estimation::publish_tensegrity_msg(red_pose, green_pose, blue_pose, _tensegrity_bars_publisher,
+          // "real_sense");
+        }
+        // _markers_publishers[0].publish(_markers[0]);
 
         for (int i = 0; i < 6; ++i)
         {
-          const Eigen::Vector3d curr_endcap{ f(_chev_mats[i]) };
-          // DEBUG_VARS(_N, ti, maxT, curr_endcap.transpose());
-          _markers[i].points.emplace_back();
-          _markers[i].points.back().x = curr_endcap[0];
-          _markers[i].points.back().y = curr_endcap[1];
-          _markers[i].points.back().z = curr_endcap[2];
+          _markers[i].header.frame_id = _tf_utils->world_frame();
+          _endcap_markers[i].header.frame_id = _tf_utils->other_frame();
+          // _endcap_markers_publishers[i].header.frame_id = _tf_utils->world_frame();
+
+          _endcap_markers_publishers[i].publish(_endcap_markers[i]);
+          _markers_publishers[i].publish(_markers[i]);
         }
 
         for (int i = 0; i < 3; ++i)
         {
-          const gtsam::Pose3 curr_xi{ f_se3(_chev_bars_mats[i]) };
+          _bars_markers[i].header.frame_id = _tf_utils->world_frame();
 
-          const Translation pti{ curr_xi.translation() };
-          _bars_markers[i].points.emplace_back();
-          _bars_markers[i].points.back().x = pti[0];
-          _bars_markers[i].points.back().y = pti[1];
-          _bars_markers[i].points.back().z = pti[2];
+          _bars_markers_publishers[i].publish(_bars_markers[i]);
         }
 
-        // _poses_file << "\n";
-        // estimation::publish_tensegrity_msg(red_pose, green_pose, blue_pose, _tensegrity_bars_publisher,
-        // "real_sense");
+        const std::string cheb0_str{ estimation::cheb_to_json_array(_chev_bars_mats[0]) };
+        const std::string cheb1_str{ estimation::cheb_to_json_array(_chev_bars_mats[1]) };
+        const std::string cheb2_str{ estimation::cheb_to_json_array(_chev_bars_mats[2]) };
+
+        const std::string astr{ tensegrity::utils::convert_to<std::string>(a) };
+        const std::string bstr{ tensegrity::utils::convert_to<std::string>(b) };
+
+        // DEBUG_VARS(cheb0_str)
+        _poses_file << "{\n";
+        _poses_file << "\"N\": " << _Nbars << ",\n";
+        _poses_file << "\"a\": " << astr << ",\n";
+        _poses_file << "\"b\": " << bstr << ",\n";
+        _poses_file << "\"offset\": [" << _offset[0] << ", " << _offset[1] << ", " << _offset[2] << "],\n";
+        _poses_file << "\"0\": " << cheb0_str << ",\n";
+        _poses_file << "\"1\": " << cheb1_str << ",\n";
+        _poses_file << "\"2\": " << cheb2_str << "\n";
+        _poses_file << "}";
       }
-      // _markers_publishers[0].publish(_markers[0]);
-
-      for (int i = 0; i < 6; ++i)
-      {
-        _markers[i].header.frame_id = _tf_utils->world_frame();
-        _endcap_markers[i].header.frame_id = _tf_utils->other_frame();
-        // _endcap_markers_publishers[i].header.frame_id = _tf_utils->world_frame();
-
-        _endcap_markers_publishers[i].publish(_endcap_markers[i]);
-        _markers_publishers[i].publish(_markers[i]);
-      }
-
-      for (int i = 0; i < 3; ++i)
-      {
-        _bars_markers[i].header.frame_id = _tf_utils->world_frame();
-
-        _bars_markers_publishers[i].publish(_bars_markers[i]);
-      }
-
-      const std::string cheb0_str{ estimation::cheb_to_json_array(_chev_bars_mats[0]) };
-      const std::string cheb1_str{ estimation::cheb_to_json_array(_chev_bars_mats[1]) };
-      const std::string cheb2_str{ estimation::cheb_to_json_array(_chev_bars_mats[2]) };
-
-      const std::string astr{ tensegrity::utils::convert_to<std::string>(a) };
-      const std::string bstr{ tensegrity::utils::convert_to<std::string>(b) };
-
-      // DEBUG_VARS(cheb0_str)
-      _poses_file << "{\n";
-      _poses_file << "\"N\": " << _Nbars << ",\n";
-      _poses_file << "\"a\": " << astr << ",\n";
-      _poses_file << "\"b\": " << bstr << ",\n";
-      _poses_file << "\"offset\": [" << _offset[0] << ", " << _offset[1] << ", " << _offset[2] << "],\n";
-      _poses_file << "\"0\": " << cheb0_str << ",\n";
-      _poses_file << "\"1\": " << cheb1_str << ",\n";
-      _poses_file << "\"2\": " << cheb2_str << "\n";
-      _poses_file << "}";
       _poses_file.close();
+
       ros::shutdown();
       // }
     }

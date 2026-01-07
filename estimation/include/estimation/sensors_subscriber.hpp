@@ -80,8 +80,14 @@ private:
     Cables cables;
     for (auto sensor : msg.sensors)
     {
-      // DEBUG_VARS(sensor)
-      cables[sensor.id] = sensor.length * cable_unit_conversion;
+      if (sensor.capacitance > 13)
+      {
+        cables[sensor.id] = sensor.length * cable_unit_conversion;
+      }
+      else
+      {
+        cables[sensor.id] = std::nan("");
+      }
     }
     return cables;
   }

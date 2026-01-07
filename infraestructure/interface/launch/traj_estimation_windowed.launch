@@ -10,8 +10,8 @@
     <arg name="use_cable_sensors" default="true"/>
     <arg name="publish_npy_poses" default="false"/>
     <arg name="autostart" default="false"/>
-    <arg name="points_valid_rate" default="0.50"/>
-    <arg name="black_points_valid_rate" default="0.05"/>
+    <arg name="points_valid_rate" default="0.75"/>
+    <arg name="black_points_valid_rate" default="0.2"/>
     <arg name="publish_mocaps" default="true"/>
     <arg name="initial_poses_params" value="[/initial/bar/0,/initial/bar/1,/initial/bar/2]"/>
     <arg name="initial_endcaps_params" value="[/initial/endcaps/0,/initial/endcaps/1,/initial/endcaps/2,/initial/endcaps/3,/initial/endcaps/4,/initial/endcaps/5]"/>

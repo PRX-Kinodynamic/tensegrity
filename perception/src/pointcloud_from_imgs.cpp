@@ -241,16 +241,29 @@ struct pointcloud_from_imgs_t
 
   ros::Time stamp;
 
+  ~pointcloud_from_imgs_t()
+  {
+    _node_status->status(interface::NodeStatus::FINISH);
+  }
+
   pointcloud_from_imgs_t(ros::NodeHandle& nh)
     : max_iterations(10)
-    , low_red(160, 153, 57)
-    , high_red(179, 255, 150)
-    , low_green(70, 100, 30)
-    , high_green(95, 255, 95)
-    , low_blue(94, 62, 45)
-    , high_blue(151, 255, 255)
+    // , low_red(160, 153, 57)
+    // , high_red(179, 255, 150)
+    // , low_green(70, 100, 30)
+    // , high_green(95, 255, 95)
+    // , low_blue(94, 62, 45)
+    // , high_blue(151, 255, 255)
+    // , low_black(0, 0, 0)
+    // , high_black(179, 255, 60)
+    , low_red(0, 125, 142)
+    , high_red(175, 255, 255)
+    , low_green(24, 108, 85)
+    , high_green(91, 255, 255)
+    , low_blue(15, 235, 48)
+    , high_blue(53, 245, 122)
     , low_black(0, 0, 0)
-    , high_black(179, 255, 60)
+    , high_black(84, 255, 66)
     , bars_poses_received(false)
     , rgb_received(false)
     , depth_received(false)
@@ -320,7 +333,7 @@ struct pointcloud_from_imgs_t
     icp_points_pub = nh.advertise<visualization_msgs::Marker>("/pointcloud/icp", 1, true);
     clustered_black = nh.advertise<visualization_msgs::MarkerArray>("/bars/clustered", 1, true);
     tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
-    tensegrity_endcaps_publisher = nh.advertise<interface::TensegrityEndcaps>(tensegrity_endcaps_topic, 1, true);
+    tensegrity_endcaps_publisher = nh.advertise<interface::TensegrityEndcaps>(tensegrity_endcaps_topic, 10, true);
     // pts_covs_markers_red_pub = nh.advertise<visualization_msgs::MarkerArray>("/endcaps/estimated/red", 1, true);
     // points_marker_pub = nh.advertise<visualization_msgs::Marker>("/pointcloud", 1, true);
     for (int i = 0; i < 3; ++i)
@@ -334,8 +347,8 @@ struct pointcloud_from_imgs_t
       estimation_pub[i] = nh.advertise<visualization_msgs::Marker>("/endcaps/estimated/" + std::to_string(i), 1, true);
     }
 
-    image_subscriber = nh.subscribe(image_topic, 1, &This::image_callback, this);
-    depth_subscriber = nh.subscribe(depth_topic, 1, &This::depth_callback, this);
+    image_subscriber = nh.subscribe(image_topic, 10, &This::image_callback, this);
+    depth_subscriber = nh.subscribe(depth_topic, 10, &This::depth_callback, this);
 
     std::vector<int> kernel_sizes{ { 2, 5 } };
     for (int i = 0; i < kernel_sizes.size(); ++i)
@@ -835,8 +848,10 @@ struct pointcloud_from_imgs_t
     const double yc{ mc.m01 / mc.m00 };
     const Pixel centroid{ xc, yc };
 
+    // DEBUG_VARS(xc, yc)
+
     const double area{ cv::contourArea(all_contours[0]) };
-    const double diameter{ std::sqrt(4.0 * area / tensegrity::constants::pi) * 3.0 };
+    const double diameter{ std::sqrt(4.0 * area / tensegrity::constants::pi) * 6 };
 
     const double cols{ static_cast<double>(_frame_colors[0].cols) };
     const double rows{ static_cast<double>(_frame_colors[0].rows) };
@@ -1045,7 +1060,7 @@ struct pointcloud_from_imgs_t
     tensegrity::utils::init_header(msg.header, "world");
     msg.message = "PointcloudFromImgs";
     msg.header.stamp = stamp;
-    const std::string publish_timestamp{ tensegrity::utils::convert_to<std::string>(stamp) };
+    // const std::string publish_timestamp{ tensegrity::utils::convert_to<std::string>(stamp) };
     // DEBUG_VARS(publish_timestamp)
     // DEBUG_VARS(seq);
     for (int idx = 0; idx < 3; ++idx)
