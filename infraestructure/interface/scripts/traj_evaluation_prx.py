@@ -1,0 +1,309 @@
+import argparse
+import glob
+import math
+import matplotlib.pyplot as plt
+# import camera_info_manager
+import numpy as np 
+import gtsam
+from numpy import linalg as LA
+import yaml
+import json
+
+class MocapDataHelper(object):
+    def __init__(self):
+        camera_extrinsic = np.array([1.0, 0.0, -0.01, 0.743, 0.0, -1.0, -0.007, 0.082, -0.01, 0.007, -1.0, 1.441, 0.0, 0.0, 0.0, 1.0]);
+        # mocap_tf = np.array([-0.706755, 0.0005153, -0.705954,0.572327, 0.70638, 0.000213504, -0.706755,-0.05, -0.000213596, -0.999396, -0.00051508, 1.00017, 0,0,0,1]);
+        c_T_m = np.array([[-0.72231893, -0.69031471, 0.04148439, -0.0911841 ], [-0.03982037, -0.01837056, -0.99903797, 2.43988996], [ 0.6904127, -0.72327596, -0.01421918, 0.18661254], [ 0.,     0.,     0.,     1.    ]])
+        c_T_m[0:3,0:3] = c_T_m[0:3,0:3].T
+        c_T_m[0:3,3] = -c_T_m[0:3,0:3] @ c_T_m[0:3,3]
+        w_T_c = np.array([[1.0,0.0,-0.01,0.743],[0.0,-1.0,-0.007,0.082],[-0.01,0.007,-1.0,1.441],[0,0,0,1]])
+        mocap_tf = w_T_c @ c_T_m
+        camera_extrinsic = camera_extrinsic.reshape((4, 4))
+        # mocap_tf = mocap_tf.reshape((4, 4))
+        # self.camera_pose = gtsam.Pose3(camera_extrinsic);
+        # self.mocap_pose = gtsam.Pose3(mocap_tf)
+        self.offset = np.array([0, 0, 0.325 / 2.0 ]);
+
+        # self.offset = np.array([0.572, -0.050, 1.000, 0])
+    
+    def read_camera_param(self, filename):
+        f = open(filename, 'r')
+        cam_params = yaml.load(f, Loader=yaml.FullLoader)
+
+        camera_extrinsic = np.array(cam_params['camera_extrinsics']+[0,0,0,1], np.float32) #: [0.999,0.001,-0.037,0.459,0.0,-1.0,-0.014,0.284,-0.037,0.014,-0.999,1.431]
+        camera_extrinsic = camera_extrinsic.reshape((4, 4))
+        self.camera_pose = gtsam.Pose3(camera_extrinsic);
+
+        # c_T_m = np.array(cam_params['camera_Tf_mocap'], np.float32) #: [0.999,0.001,-0.037,0.459,0.0,-1.0,-0.014,0.284,-0.037,0.014,-0.999,1.431]
+        # c_T_m = c_T_m.reshape((4, 4))
+        # # c_T_m = np.array([[-0.72231893, -0.69031471, 0.04148439, -0.0911841 ], [-0.03982037, -0.01837056, -0.99903797, 2.43988996], [ 0.6904127, -0.72327596, -0.01421918, 0.18661254], [ 0.,     0.,     0.,     1.    ]])
+        # # c_T_m = np.array([[-0.71982338, -0.69235535,  0.04998369, -0.09336075], [-0.04100413, -0.02947068, -0.99872426,  2.16381353], [ 0.69294514, -0.72095461, -0.00717574,  0.1893245 ], [ 0.        ,  0.        ,  0.        ,  1.        ]])
+        # c_T_m[0:3,0:3] = c_T_m[0:3,0:3].T
+        # c_T_m[0:3,3] = -c_T_m[0:3,0:3] @ c_T_m[0:3,3]
+        # mocap_tf = camera_extrinsic @ c_T_m
+        # self.mocap_pose = gtsam.Pose3(mocap_tf)
+        # # print(camera_extrinsic)
+        # # print(c_T_m)
+        # print(f"mocap_tf {mocap_tf}")
+        f.close();
+
+    def camera_transform(self, data):
+        for di in data:
+            for idx in range(3):
+                if data[di][idx] is not None: 
+                    data[di][idx] = self.camera_pose * data[di][idx];
+        return data
+
+
+    def mocap_transform(self, data):
+        # ptp = self.mocap_tf @ pt + self.offset; 
+        # ptp = (self.mocap_tf @ pt)[0:3] + self.mocap_tf[0:3,3]; 
+        # ptp = self.mocap_pose.transformFrom(pt)
+        # ptp[2] = -ptp[2]
+            
+        for di in data:
+            for idx in range(3):
+                if data[di][idx] is not None: 
+                    # print(f"pose: {data[di][idx]}")
+                    # print(f"self.mocap_pose: {self.mocap_pose}")
+                    data[di][idx] = self.mocap_pose * data[di][idx];
+
+        return data
+
+    def read_from_npy(self, directory):
+        red = np.load(directory + "/poses-proposed/red.npy")
+        green = np.load(directory + "/poses-proposed/green.npy")
+        blue = np.load(directory + "/poses-proposed/blue.npy")
+
+
+        data = {}
+        idx = 0
+        for r,g,b in zip(red, green, blue):
+
+            jfile = open(directory + f"/data/{str(idx).zfill(4)}.json", 'r' )
+            j = json.load(jfile)
+            ti = float(j["header"]["secs"])
+            idx += 1
+
+            # print(f"{idx} ti {ti}")
+            # if not (1761079096.37843 < ti <= 1761079126.37843):
+            #     continue
+            poses = []
+
+            poses.append(gtsam.Pose3(r))
+            poses.append(gtsam.Pose3(g))
+            poses.append(gtsam.Pose3(b))
+            data[ti] = poses
+            # print(f" red pose: {poses[0]}")
+        return data;
+
+    def read_poses_data(self, filename):
+        file = open(filename, 'r')
+
+        data = {}
+        for line in file:
+            l = line.split()
+            if l[0] == "#":
+                continue
+            ti = float(l[1])
+            q0 = np.array([l[2], l[3], l[4], l[5]], np.float32)
+            t0 = np.array([l[6], l[7], l[8]], np.float32)
+            q1 = np.array([l[9], l[10], l[11], l[12]], np.float32)
+            t1 = np.array([l[13], l[14], l[15]], np.float32)
+            q2 = np.array([l[16], l[17], l[18], l[19]], np.float32)
+            t2 = np.array([l[20], l[21], l[22]], np.float32)
+
+            poses = []
+            for q, t in zip([q0,q1,q2], [t0,t1,t2]):
+                if np.isnan(q).any() or np.isnan(t).any():
+                    poses.append(None)
+                else:
+                    R = gtsam.Rot3(q[0],q[1],q[2],q[3]);
+                    poses.append(gtsam.Pose3(R, t))
+
+            data[ti] = poses
+        # data_out = [[None,None,None]] * (idx+1)
+        # # print(f"data_out {len(data_out)}")
+        # for m_idx in data:
+        #     # print(m_idx)
+        #     data_out[m_idx] = data[m_idx]
+        return data
+
+    def plot(self, ax, data, marker, color):
+
+        xi = []
+        yi = []
+        zi = []
+
+        for di in data:
+            # if di is not None:
+
+            for pose in data[di]:
+                if pose is not None: 
+                    pt0 = pose.transformFrom(self.offset)
+                    pt1 = pose.transformFrom(-self.offset)
+                    # print(f"p0 {pt0} p1 {pt1}")
+                    # xi.append(pose.translation()[0]);
+                    # yi.append(pose.translation()[1]);
+                    # zi.append(pose.translation()[2]);
+                    xi.append(pt0[0]);
+                    yi.append(pt0[1]);
+                    zi.append(pt0[2]);
+                    xi.append(pt1[0]);
+                    yi.append(pt1[1]);
+                    zi.append(pt1[2]);
+                # print(f"m: {di[mi]}")
+                # ax.scatter(di[mi][0],di[mi][1],di[mi][2], marker='o')
+        ax.scatter(xi, yi, zi, marker=marker, c=color)
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+
+    def find_closest(self, z_data, gt_ti):
+        dt_min = 1000
+        t_min = 1000;
+        for zi in z_data:
+            dt = abs(zi - gt_ti)
+            if dt < dt_min:
+                dt_min = dt;
+                t_min = zi
+        return t_min, dt_min
+
+
+    def compute_errors(self, gt_data, z_data, filename_prefix ):
+
+        all_errors = []
+        all_errors_cm = []
+        missed_frames = 0;
+        rot_symmetry = gtsam.Pose3(gtsam.Rot3(0.0, 0.0, 1.0, 0.0),[0.0, 0.0, 0.0]) ;
+        # print(f"z_data {z_data}")
+        for gt_idx in gt_data:
+            error = []
+            error_cm = []
+            t_min, dt_min = self.find_closest(z_data, gt_idx)
+
+            if dt_min < 0.1:
+                for gt_p, z_p in zip(gt_data[gt_idx], z_data[t_min]):
+                    if gt_p is not None and z_p is not None: 
+                        err0 = np.abs(gtsam.Pose3.Logmap(gt_p.between(z_p)))
+                        err1 = np.abs(gtsam.Pose3.Logmap(gt_p.between(z_p * rot_symmetry )))
+                        if LA.norm(err0) < LA.norm(err1):
+                            error.append(err0)
+                        else:
+                            error.append(err1)
+                        # error.append(np.abs(gtsam.Pose3.Logmap(gt_p.between(z_p))))
+                        error_cm.append(np.abs(gt_p.translation() - z_p.translation()))
+                    else:
+                        error.append(np.array([np.nan]*6))
+                        error_cm.append(np.array([np.nan]*3))
+                all_errors.append(np.array(error))
+                all_errors_cm.append(np.array(error_cm))
+            else:
+                # print(f"missed: {gt_idx} {dt_min}")
+                missed_frames += 1
+        all_errors = np.array(all_errors)
+        all_errors_cm = np.array(all_errors_cm)
+
+        # print(f"all_errors {all_errors}")
+
+        mean_err = np.nanmean(all_errors, axis=(0,1))
+        stdd_err = np.nanstd(all_errors, axis=(0,1))
+        mean_err_cm = np.nanmean(all_errors_cm, axis=(0,1))
+        stdd_err_cm = np.nanstd(all_errors_cm, axis=(0,1))
+        
+        all_errors_file = open(filename_prefix+ "_all_errors.txt", 'w');
+        all_errors_cm_file = open(filename_prefix + "_all_errors_cm.txt", 'w');
+        stats_file = open(filename_prefix + "_stats.txt", 'w');
+
+        print(f"mean_err {mean_err} missed_frames {missed_frames}")
+
+        # print(f"all_errors {all_errors}")
+        for errs in all_errors:
+            for e in errs:
+                for xi in e:
+                    all_errors_file.write(str(xi) + " ")
+                all_errors_file.write("\n")
+
+        for errs in all_errors_cm:
+            for e in errs:
+                for xi in e:
+                    all_errors_cm_file.write(str(xi) + " ")
+                all_errors_cm_file.write("\n")
+
+        for stat in [mean_err, stdd_err, mean_err_cm, stdd_err_cm, [missed_frames]]:
+            for s in stat:
+                stats_file.write(str(s) + " ")
+        stats_file.write("\n")
+
+
+        all_errors_file.close()
+        all_errors_cm_file.close()
+        stats_file.close()
+        # t_err = np.nanmean(all_errors[:,:,3:], axis=1)
+        # r_err = np.nanmean(all_errors[:,:,:2])
+        # print(f"terr {t_err}") # 
+        # print(f"rerr {r_err}") # 
+        # print(f"terr {t_err * 100}") # 
+
+
+if __name__ == '__main__':
+
+    argparse = argparse.ArgumentParser()
+
+    argparse.add_argument('-g', '--gt_filename', help='GT', required=True)
+    argparse.add_argument('-e', '--estimation_filename', help='Estimation', required=True)
+    argparse.add_argument('-o', '--output_prefix', help='Estimation', required=True)
+    argparse.add_argument('-c', '--camera_filename', help='Estimation', required=True)
+    argparse.add_argument('-d', '--npy_dir', help='Estimation', required=True)
+    # argparse.add_argument('-t', '--max_time', help='Estimation', required=True)
+
+    args = argparse.parse_args()
+
+    gt_filename = args.gt_filename
+    estimation_filename = args.estimation_filename
+    output_prefix = args.output_prefix
+    npy_dir = args.npy_dir
+    # max_time = args.max_time
+
+    print(f"gt_filename {gt_filename} ")
+    print(f"estimation_filename {estimation_filename} ")
+    print(f"output_prefix {output_prefix} ")
+
+    mdh = MocapDataHelper()
+    mdh.read_camera_param(args.camera_filename)
+    # gt_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_gt_250909_232339.txt"
+    # gt_filename = "/home/edgar/remotes/perception/tensegrity_ws/data/test/test_gt_250909_162758.txt"
+    # estimation_filename = "/Users/Gary/pracsys/remotes/perception/tensegrity_ws/data/april28/10/snapshot/no_cable_estimated_endcap_250909_232345.txt"
+    gt_data = mdh.read_poses_data(gt_filename);
+    z_data = mdh.read_poses_data(estimation_filename);
+    old_data = mdh.read_from_npy(npy_dir)
+
+    # assert len(gt_data) == len(z_data), "Sizes not match!"
+    # assert len(gt_data) == len(old_data), "Sizes not match!"
+
+    gt_data = mdh.camera_transform(gt_data)
+    # z_data = mdh.camera_transform(z_data)
+    old_data = mdh.camera_transform(old_data)
+    # for ti in gt_data:
+    #     print(f"{ti}: {gt_data[ti]}")
+    # for ti in z_data:
+    #     print(f"{ti}: {z_data[ti]}")
+
+    mdh.compute_errors(gt_data, z_data, output_prefix)
+    mdh.compute_errors(gt_data, old_data, output_prefix + "_old" )
+
+    # estimation_filename = mdh.mocap_transform(estimation_filename)
+
+    # estimation_data = mdh.read_estimation_data(estimation_filename)
+    # print(f"gt_data: {gt_data}")
+    # print(f"gt_data: {gt_data.shape}")
+        
+    # mdh.cmp_data(gt_data, estimation_data, "/tmp/errors.txt")
+
+    # fig = plt.figure()
+
+    # ax = fig.add_subplot(projection='3d')
+    # mdh.plot(ax, gt_data, 'o', 'k')
+    # # mdh.plot(ax, z_data, 'x', 'b')
+    # # mdh.plot(ax, estimation_data, 'x', 'r')
+    # plt.show()

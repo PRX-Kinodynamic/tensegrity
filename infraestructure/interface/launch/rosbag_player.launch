@@ -1,0 +1,13 @@
+<launch>
+    <arg name="rgb_bag"/>
+    <arg name="depth_bag"/>
+    <arg name="control_bag"/>
+
+    <node pkg="rosbag" type="play" name="rgb_rosbag_player" output="screen" args="$(arg rgb_bag) $(arg depth_bag) $(arg control_bag)" required="true"/> 
+    <!-- <node pkg="rosbag" type="play" name="rgb_rosbag_player" output="screen" args="$(arg rgb_bag) $(arg depth_bag) $(arg control_bag)" required="true"/>  -->
+    <!-- <node pkg="rosbag" type="play" name="depth_rosbag_player" args="$(arg depth_bag)"/>  -->
+    <!-- <node pkg="rosbag" type="play" name="control_rosbag_player" args="$(arg control_bag)"/>  -->
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="tf_world_mocaps" 
+        args='0 0 0 0 0 0 1  real_sense ""' />
+</launch>
