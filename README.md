@@ -9,8 +9,8 @@ cd gtsam
 git checkout 4.2.0 # Don't use a newer one
 mkdir build
 # use ccmake .. for more options. installing in local dir to avoid permissions issues
-cd build -DCMAKE_PREFIX_INSTALL=../install -DGTSAM_USE_SYSTEM_EIGEN=ON .. 
-make -j8
+cd build
+make -j8 -DCMAKE_PREFIX_INSTALL=../install -DGTSAM_USE_SYSTEM_EIGEN=ON .. 
 make install
 export GTSAM_DIR=$(pwd)/install/lib/cmake/GTSAM # <- add to .bashrc
 ```
