@@ -1535,10 +1535,10 @@ public:
 
     Eigen::Matrix<double, 2, 2> errA_H_u0A, errA_H_u1A;
     Eigen::Matrix<double, 2, 2> errB_H_u0B, errB_H_u1B;
-    const Eigen::Vector<double, 2> errorA{ u0A.errorVector(u1A, errA_H_u0A, errA_H_u1A) };
-    const Eigen::Vector<double, 2> errorB{ u0B.errorVector(u1B, errB_H_u0B, errB_H_u1B) };
+    const Eigen::Vector2d errorA{ u0A.errorVector(u1A, errA_H_u0A, errA_H_u1A) };
+    const Eigen::Vector2d errorB{ u0B.errorVector(u1B, errB_H_u0B, errB_H_u1B) };
 
-    const Eigen::Vector<double, 4> err{ { errorA[0], errorA[1], errorB[0], errorB[1] } };
+    const Eigen::Vector4d err{ { errorA[0], errorA[1], errorB[0], errorB[1] } };
     Eigen::Matrix<double, 4, 2> err_H_errA{ Eigen::Matrix<double, 4, 2>::Zero() };
     Eigen::Matrix<double, 4, 2> err_H_errB{ Eigen::Matrix<double, 4, 2>::Zero() };
     err_H_errA(0, 0) = 1.0;
@@ -1633,7 +1633,9 @@ public:
       *Hxk = err_H_dot * dot_H_p31 * p31_H_pt3 * p3_H_xk;  // no-lint
     }
 
-    return Eigen::Vector<double, 1>(std::min(err, 0.0));
+    Eigen::Matrix<double, 1, 1> result;
+    result << std::min(err, 0.0);
+    return result;
   }
 
   static Error parallel_triangles(const SE3& xi, const SE3& xj, const SE3& xk,      // no-lint
@@ -1831,13 +1833,13 @@ class tensegrity_triangles_aligned_factor_t
 {
 public:
   using SE3 = gtsam::Pose3;
-  using Translation = Eigen::Vector<double, 3>;
+  using Translation = Eigen::Vector3d;
   using Rotation = gtsam::Rot3;
   using SkewMatrix = Eigen::Matrix<double, 3, 3>;
   using Base = gtsam::NoiseModelFactor1<SE3, Rotation, SE3, Rotation, SE3, Rotation>;
   using NoiseModel = gtsam::noiseModel::Base::shared_ptr;
   using Jacobian = Eigen::Matrix<double, 3, 6>;
-  using Meassurement = Eigen::Vector<double, 1>;
+  using Meassurement = Eigen::Matrix<double, 1, 1>;
   using Error = Eigen::VectorXd;
 
   // using BarFactor = bar_two_observations_factor_t;
@@ -2105,13 +2107,13 @@ class endcap_observations_t : public gtsam::NoiseModelFactorN<gtsam::Pose3>
 {
 public:
   using SE3 = gtsam::Pose3;
-  using Translation = Eigen::Vector<double, 3>;
+  using Translation = Eigen::Vector3d;
   using Rotation = gtsam::Rot3;
   using SkewMatrix = Eigen::Matrix<double, 3, 3>;
   using Base = gtsam::NoiseModelFactorN<SE3>;
   using NoiseModel = gtsam::noiseModel::Base::shared_ptr;
   using Jacobian = Eigen::Matrix<double, 3, 6>;
-  using Meassurement = Eigen::Vector<double, 1>;
+  using Meassurement = Eigen::Matrix<double, 1, 1>;
   using Error = Eigen::VectorXd;
 
   endcap_observations_t(const gtsam::Key key_Xi, const Translation offset, const Translation measurement,
