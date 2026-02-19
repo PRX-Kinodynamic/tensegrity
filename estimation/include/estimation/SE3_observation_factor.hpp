@@ -17,8 +17,8 @@ class SE3_observation_factor_t : public gtsam::NoiseModelFactor1<SE3>
 {
 public:
   // using SE3 = prx::fg::se3_t;
-  using Translation = Eigen::Matrix<double, 3, 1>;
-  using Observation = Eigen::Matrix<double, 3, 1>;
+  using Translation = Eigen::Vector<double, 3>;
+  using Observation = Eigen::Vector<double, 3>;
   using Rotation = Eigen::Matrix<double, 3, 3>;
   using SkewMatrix = Eigen::Matrix<double, 3, 3>;
   using Base = gtsam::NoiseModelFactor1<SE3>;

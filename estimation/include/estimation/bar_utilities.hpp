@@ -7,13 +7,6 @@
 
 namespace estimation
 {
-
-// Type aliases to fix "does not name a type" errors
-using Translation = gtsam::Point3; 
-using Velocity = gtsam::Vector3;
-using Observation = gtsam::Vector6; // Assuming SE3 observation is 6D twist/logmap
-using Triangle = std::tuple<Translation, Translation, Translation>;
-
 enum RodColors
 {
   RED = 0,
@@ -548,7 +541,7 @@ struct tensegrity_graph_inputs_t
 
   gtsam::noiseModel::Base::shared_ptr btw_noise;
   // Cable vars
-  Eigen::Matrix<double, 9, 1> cables;
+  Eigen::Vector<double, 9> cables;
   std::array<std::pair<int, int>, 9> cable_map;
   gtsam::noiseModel::Base::shared_ptr cable_noise;
 

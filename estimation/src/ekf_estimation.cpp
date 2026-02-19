@@ -70,7 +70,7 @@ struct ekf_node_t
 
   using Rotation = gtsam::Rot3;
   using SE3 = gtsam::Pose3;
-  using Velocity = Eigen::Matrix<double, 6, 1>;
+  using Velocity = Eigen::Vector<double, 6>;
 
   using SE3ObsFactor = estimation::SE3_observation_factor_t<SE3>;
   using NewSE3ObsFactor = estimation::SE3_symmetric_observation_factor_t;

@@ -1,27 +1,6 @@
-cmake_minimum_required(VERSION 3.0.2)
-project(estimation)
-
-# --- START MANUAL TORCH SETUP ---
-set(CMAKE_PREFIX_PATH "/home/willjohnson/libtorch" ${CMAKE_PREFIX_PATH})
-set(Torch_DIR "/home/willjohnson/libtorch/share/cmake/Torch")
-
-find_package(Torch REQUIRED)
-
-if(Torch_FOUND)
-  message(STATUS ">>>> SUCCESS: Torch found at ${TORCH_INSTALL_PREFIX}")
-  message(STATUS ">>>> Torch Libraries: ${TORCH_LIBRARIES}")
-else()
-  message(FATAL_ERROR ">>>> FAILURE: Could not find Torch. Check path /home/willjohnson/libtorch")
-endif()
-# --- END MANUAL TORCH SETUP ---
-
-# ... rest of your file (find_package(catkin ...), etc.)
-
-# cmake_minimum_required(VERSION 3.15)
-# set(Torch_DIR "/home/willjohnson/libtorch/share/cmake/Torch")
+cmake_minimum_required(VERSION 3.15)
 project(estimation)
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # find_package(OpenCV REQUIRED )
 
