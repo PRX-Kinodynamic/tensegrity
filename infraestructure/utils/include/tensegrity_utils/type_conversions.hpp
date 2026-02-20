@@ -3,7 +3,6 @@
 #include <type_traits>
 #include <tensegrity_utils/template_utils.hpp>
 #include <tensegrity_utils/constants.hpp>
-#include <Eigen/Core>
 
 namespace tensegrity
 {
@@ -102,21 +101,6 @@ inline StringType convert_to(const From& iterable)
   }
   return str;
 }
-
-// --- ADD THIS BLOCK FOR EIGEN VECTORS ---
-template <typename StringType, typename Derived,
-  std::enable_if_t<std::is_same<StringType, std::string>::value, bool> = true>
-inline StringType convert_to(const Eigen::MatrixBase<Derived>& mat)
-{
-  StringType str{};
-  for (int i = 0; i < mat.size(); ++i)
-  {
-    str += convert_to<StringType>(mat(i));
-    str += constants::separating_value;
-  }
-  return str;
-}
-// ----------------------------------------
 
 template <typename Out, typename In>
 void auto_cast(Out& out, const In& in)
