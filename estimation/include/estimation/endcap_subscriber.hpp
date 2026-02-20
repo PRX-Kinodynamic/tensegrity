@@ -32,7 +32,7 @@ struct rod_callback_t
     {
       auto zin = observations.endcaps[i];
       interface::copy(z, zin);
-      if (std::isnan(z.template maxCoeff<Eigen::PropagateNaN>()))
+      if (z.hasNaN())
       {
         observations.endcaps.erase(observations.endcaps.begin() + i);
       }
