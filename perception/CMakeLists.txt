@@ -5,6 +5,9 @@ project(perception)
 set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
 find_package(GTSAM REQUIRED)
 
+# Sledgehammer
+include_directories(BEFORE SYSTEM "/home/willjohnson/gtsam/install/include")
+
 # 2. Force the Eigen 3.4 path (Using your corrected /edgar/ path)
 set(EIGEN3_INCLUDE_DIR "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
 
