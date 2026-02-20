@@ -52,6 +52,7 @@
 
 #include <dynamic_reconfigure/server.h>
 #include <perception/TensegrityInitializationConfig.h>
+#include <thread>
 
 using Rotation = gtsam::Rot3;
 using Pixel = Eigen::Vector2d;
