@@ -452,7 +452,7 @@ void remove_invalid_observations(interface::TensegrityEndcaps& observations)
     auto zin = observations.endcaps[i];
     interface::copy(z, zin);
     // if (z.array().isNaN())
-    if (z.hasNaN())
+    if (std::isnan(z.template maxCoeff<Eigen::PropagateNaN>()))
     {
       observations.endcaps.erase(observations.endcaps.begin() + i);
       // nan_found = true;

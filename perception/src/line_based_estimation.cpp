@@ -114,7 +114,7 @@ struct bar2D_t
   template <typename EigenType>
   static bool isnan(EigenType& m)
   {
-    return m.hasNaN();
+    return std::isnan(m.template maxCoeff<Eigen::PropagateNaN>());
   }
   void check()
   {
@@ -907,8 +907,8 @@ struct tensegrity_3d_icp_t
 
   void add_ellipse(cv::Mat& img, const Pixel& mu, const Eigen::Matrix2d& sigma, const Color color)
   {
-    if (mu.hasNaN() and
-        sigma.hasNaN())
+    if (std::isnan(mu.template maxCoeff<Eigen::PropagateNaN>()) and
+        std::isnan(sigma.template maxCoeff<Eigen::PropagateNaN>()))
       return;
 
     // DEBUG_VARS(sigma);

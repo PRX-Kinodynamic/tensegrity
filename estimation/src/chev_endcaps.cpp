@@ -393,7 +393,7 @@ struct chev_estimation_t
       {
         // const Translation zA{ transform.transformFrom(endcaps_curr[i][j]) };
         const Translation zA{ endcaps_curr[i][j] };
-        if (not zA.hasNaN())
+        if (not std::isnan(zA.template maxCoeff<Eigen::PropagateNaN>()))
         {
           graph.emplace_shared<VectorEvaluationFactor>(kendcaps[j], zA, model, Ncurr, ti, a, b);
         }
@@ -539,7 +539,7 @@ struct chev_estimation_t
     {
       for (int i = 0; i < 6; ++i)
       {
-        if (not vt[i].hasNaN())
+        if (not std::isnan(vt[i].template maxCoeff<Eigen::PropagateNaN>()))
         {
           vt[i] = tf.transformFrom(vt[i]);
         }
@@ -561,7 +561,7 @@ struct chev_estimation_t
       {
         const Eigen::Vector3d z{ endcaps_test[i][j] };
 
-        if (not z.hasNaN())
+        if (not std::isnan(z.template maxCoeff<Eigen::PropagateNaN>()))
         {
           const Eigen::Vector3d e{ func(cheb_mats[j]) };
 
