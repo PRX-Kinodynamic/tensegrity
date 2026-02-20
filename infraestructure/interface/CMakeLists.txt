@@ -4,6 +4,13 @@ set(CMAKE_CXX_STANDARD 17)
 
 # find_package(OpenCV REQUIRED )
 
+# Add this BEFORE find_package(catkin ...)
+set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
+find_package(GTSAM REQUIRED)
+
+# This ensures only THIS package looks at Edgar's Eigen
+include_directories(BEFORE "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
+
 find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   # ml4kp_bridge

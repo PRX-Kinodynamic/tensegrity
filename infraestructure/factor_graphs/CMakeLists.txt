@@ -7,6 +7,13 @@ if(${CMAKE_VERSION} GREATER_EQUAL 3.30)
   cmake_policy(SET CMP0167 NEW)
 endif()
 
+# Add this BEFORE find_package(catkin ...)
+set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
+find_package(GTSAM REQUIRED)
+
+# This ensures only THIS package looks at Edgar's Eigen
+include_directories(BEFORE "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   roslib
