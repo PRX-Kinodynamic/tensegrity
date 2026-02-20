@@ -4,13 +4,6 @@ project(tensegrity)
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
-# Add this BEFORE find_package(catkin ...)
-set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
-find_package(GTSAM REQUIRED)
-
-# This ensures only THIS package looks at Edgar's Eigen
-include_directories(BEFORE "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
-
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
