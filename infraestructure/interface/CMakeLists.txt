@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(interface)
+include_directories(BEFORE "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
 set(CMAKE_CXX_STANDARD 17)
 
 # find_package(OpenCV REQUIRED )

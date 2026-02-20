@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(tensegrity)
+include_directories(BEFORE "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
