@@ -6,7 +6,7 @@ set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
 find_package(GTSAM REQUIRED)
 
 # 2. THE ULTIMATE OVERRIDE: Inject paths directly into the compiler's brain# By using -I here, GCC reads these folders before ROS can even speak.
-set(CMAKE_CXX_FLAGS "-I/home/willjohnson/gtsam/install/include -I/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0 ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "-I/home/willjohnson/gtsam/install/include -I/home/willjohnson/eigen_install/include/eigen3 ${CMAKE_CXX_FLAGS}")
 
 set(CMAKE_CXX_STANDARD 17)
 
