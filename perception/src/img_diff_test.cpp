@@ -130,7 +130,7 @@ int main(int argc, char** argv)
   cv::Mat img1{ cv::imread(img1_path, cv::IMREAD_GRAYSCALE) };
 
   PRINT_MSG("Images read");
-  auto orb = cv::ORB::create(100);
+  auto orb = cv::ORB::create(500);
   // auto orb = cv::SIFT::create(500);
   std::vector<cv::KeyPoint> keypoints, keypoints_1;
   cv::Mat descriptors, descriptors_1;
