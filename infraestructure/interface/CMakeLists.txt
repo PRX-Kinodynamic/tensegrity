@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.15)
 project(interface)
+
+# 1. Point to the GTSAM you built (which is already linked to Eigen 3.4)
+set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
+find_package(GTSAM REQUIRED)
+
+# Sledgehammer
+include_directories(BEFORE SYSTEM "/home/willjohnson/gtsam/install/include")
+
+# 2. Force the Eigen 3.4 path (Using your corrected /edgar/ path)
+set(EIGEN3_INCLUDE_DIR "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
+
+# 3. Tell the compiler to use this folder BEFORE anything else, and treat it as a SYSTEM header
+# (SYSTEM helps ignore version warnings that might trigger errors)
+include_directories(BEFORE SYSTEM "${EIGEN3_INCLUDE_DIR}")
+
 set(CMAKE_CXX_STANDARD 17)
 
 # find_package(OpenCV REQUIRED )
