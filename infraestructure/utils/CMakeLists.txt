@@ -5,14 +5,8 @@ project(tensegrity_utils)
 set(GTSAM_DIR "/home/willjohnson/gtsam/install/lib/cmake/GTSAM")
 find_package(GTSAM REQUIRED)
 
-# Sledgehammer
-include_directories(BEFORE "/home/willjohnson/gtsam/install/include")
-
-# 2. Force the Eigen 3.4 path (Using your corrected /edgar/ path)
-set(EIGEN3_INCLUDE_DIR "/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0")
-
-# 3. Tell the compiler to use this folder BEFORE anything else
-include_directories(BEFORE "${EIGEN3_INCLUDE_DIR}")
+# 2. THE ULTIMATE OVERRIDE: Inject paths directly into the compiler's brain# By using -I here, GCC reads these folders before ROS can even speak.
+set(CMAKE_CXX_FLAGS "-I/home/willjohnson/gtsam/install/include -I/home/willjohnson/tensegrity_ws/src/edgar/eigen-3.4.0 ${CMAKE_CXX_FLAGS}")
 
 set(CMAKE_CXX_STANDARD 17)
 
