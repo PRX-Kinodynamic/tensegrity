@@ -2,6 +2,7 @@
 #include <std_msgs/Bool.h>
 #include <nodelet/nodelet.h>
 #include <pluginlib/class_list_macros.hpp>
+#include "estimation/full_traj_estimation.hpp"
 
 // #include <ml4kp_bridge/defs.h>
 

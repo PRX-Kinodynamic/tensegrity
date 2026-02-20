@@ -47,7 +47,7 @@ class pose_from_poly_t : public Base
   using PolyMatrix = Eigen::Matrix<double, DIM, -1>;
 
 public:
-  pose_from_poly_t() : _t0(ros::Time::ZERO), _poly_matrix(6), _step(0.1)
+  pose_from_poly_t() : _t0(ros::Time(0)), _poly_matrix(6), _step(0.1)
   {
   }
 
