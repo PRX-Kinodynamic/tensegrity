@@ -246,6 +246,16 @@ struct pointcloud_from_imgs_t
     _node_status->status(interface::NodeStatus::FINISH);
   }
 
+  void read_color_filter(const std::string filters_namespace, const std::string color,  cv::Scalar& cv_low,  cv::Scalar& cv_high)
+  {
+    ros::NodeHandle nh_param(filters_namespace + "/" + color);
+    std::vector<int> low, high;
+    PARAM_SETUP(nh_param, low)
+    PARAM_SETUP(nh_param, high)
+    cv_low = cv::Scalar(low[0], low[1], low[2]);
+    cv_high = cv::Scalar(high[0], high[1], high[2]);
+  }
+
   pointcloud_from_imgs_t(ros::NodeHandle& nh)
     : max_iterations(10)
     // , low_red(160, 153, 57)
@@ -287,6 +297,12 @@ struct pointcloud_from_imgs_t
     lm_helper = std::make_shared<factor_graphs::levenberg_marquardt_t>(nh, "/nodes/icp/fg", lm_params);
 
     double frequency{ 30 };
+    std::string filters_namespace;
+    PARAM_SETUP(nh, filters_namespace);
+    read_color_filter(filters_namespace, "black",  low_black,  high_black);
+    read_color_filter(filters_namespace, "red",  low_red,  high_red);
+    read_color_filter(filters_namespace, "green",  low_green,  high_green);
+    read_color_filter(filters_namespace, "blue",  low_blue,  high_blue);
 
     PARAM_SETUP(nh, points_valid_rate);
     PARAM_SETUP(nh, black_points_valid_rate);
