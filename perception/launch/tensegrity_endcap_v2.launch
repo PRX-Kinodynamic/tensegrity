@@ -6,6 +6,7 @@
 
 
     <arg name="observation_freq" default="5"/>
+    <arg name="rgb_topic" default="/camera/rgb"/>
 
     <!-- <arg name="color" /> -->
     <arg name="endcap_id"/>
@@ -20,8 +21,8 @@
     </node>
 
     <node pkg="nodelet" type="nodelet" name="BlackFilterrgb" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
-        <param name="subscriber_topic" value="/images/rgb"/>
-        <param name="publisher_topic" value="/images/rgb/black"/>
+        <param name="subscriber_topic" value="$(arg rgb_topic)"/>
+        <param name="publisher_topic" value="$(arg rgb_topic)/black"/>
         <param name="filters_namespace" value="$(arg filters_namespace)/black/"/>
         <param name="publish_rgb" value="false"/>
         <param name="node_id" value="/nodes/BlackFilter"/>
@@ -29,8 +30,8 @@
     </node>
 
     <node pkg="nodelet" type="nodelet" name="ColorFilterred" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
-        <param name="subscriber_topic" value="/images/rgb"/>
-        <param name="publisher_topic" value="/images/rgb/red"/>
+        <param name="subscriber_topic" value="$(arg rgb_topic)"/>
+        <param name="publisher_topic" value="$(arg rgb_topic)/red"/>
         <param name="filters_namespace" value="$(arg filters_namespace)/red/"/>
         <param name="publish_rgb" value="false"/>
         <param name="encoding" value="mono8"/>
@@ -38,8 +39,8 @@
     </node>
 
     <node pkg="nodelet" type="nodelet" name="ColorFiltergreen" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
-        <param name="subscriber_topic" value="/images/rgb"/>
-        <param name="publisher_topic" value="/images/rgb/green"/>
+        <param name="subscriber_topic" value="$(arg rgb_topic)"/>
+        <param name="publisher_topic" value="$(arg rgb_topic)/green"/>
         <param name="filters_namespace" value="$(arg filters_namespace)/green/"/>
         <param name="publish_rgb" value="false"/>
         <param name="encoding" value="mono8"/>
@@ -47,8 +48,8 @@
     </node>
 
     <node pkg="nodelet" type="nodelet" name="ColorFilterblue" args="load perception/ColorFilter $(arg nodelet_name)" output="screen">
-        <param name="subscriber_topic" value="/images/rgb"/>
-        <param name="publisher_topic" value="/images/rgb/blue"/>
+        <param name="subscriber_topic" value="$(arg rgb_topic)"/>
+        <param name="publisher_topic" value="$(arg rgb_topic)/blue"/>
         <param name="filters_namespace" value="$(arg filters_namespace)/blue/"/>
         <param name="publish_rgb" value="false"/>
         <param name="encoding" value="mono8"/>

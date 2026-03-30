@@ -183,9 +183,9 @@ struct traj_estimation_t
     PARAM_SETUP(nh, cable_map_filename)
     PARAM_SETUP(nh, tensegrity_endcaps_topic);
     PARAM_SETUP(nh, estimated_endcaps_topic);
-    PARAM_SETUP(nh, initial_endcaps_params);
-    PARAM_SETUP(nh, initial_poses_params);
     PARAM_SETUP(nh, poses_filename);
+    PARAM_SETUP_WITH_DEFAULT(nh, initial_endcaps_params, initial_endcaps_params);
+    PARAM_SETUP_WITH_DEFAULT(nh, initial_poses_params, initial_poses_params);
     PARAM_SETUP_WITH_DEFAULT(nh, queue_size, queue_size)
     PARAM_SETUP_WITH_DEFAULT(nh, frequency, frequency);
     PARAM_SETUP_WITH_DEFAULT(nh, window_dt, window_dt);
@@ -204,19 +204,11 @@ struct traj_estimation_t
     _sensors_callback = std::make_shared<estimation::sensors_callback_t>(nh);
     const ros::Duration timer(1.0 / frequency);
     _timer = nh.createTimer(timer, &This::timer_callback, this);
-    // PARAM_SETUP(nh, tensegrity_pose_topic);
-    // PARAM_SETUP(nh, tensegrity_traj_topic)
-    // PARAM_SETUP(nh, initial_estimate_filename)
     _tensegrity_bars_publisher = nh.advertise<interface::TensegrityBars>(tensegrity_pose_topic, 1, true);
     _tensegrity_endcaps_publisher = nh.advertise<interface::TensegrityEndcaps>(estimated_endcaps_topic, 1, true);
-    // _tensegrity_multi_publisher = nh.advertise<interface::TensegrityBarsArray>(tensegrity_multi_topic, 1, true);
 
-    // _tg_input.cable_map = {};
     _tg_input.cable_noise = gtsam::noiseModel::Isotropic::Sigma(1, 1.6e-2);
     _tg_input.cable_map = estimation::create_cable_map_fix_endcaps(cable_map_filename);
-    // red_rod = std::make_shared<rod_callback_t>(nh, red_endcaps_topic);
-    // blue_rod = std::make_shared<rod_callback_t>(nh, blue_endcaps_topic);
-    // green_rod = std::make_shared<rod_callback_t>(nh, green_endcaps_topic);
 
     for (int i = 0; i < 6; ++i)
     {
@@ -262,33 +254,6 @@ struct traj_estimation_t
         _poses[i] = gtsam::Pose3(gtsam::Rot3(quat), t);
       }
     }
-
-    // if (all_endcaps_received)
-    // {
-    //   gtsam::noiseModel::Isotropic::shared_ptr z0_noise{ gtsam::noiseModel::Isotropic::Sigma(3, 1e-3) };
-    //   for (int i = 0; i < 6; ++i)
-    //   {
-    //     gtsam::Ordering key_ordering;
-    //     gtsam::Key key{ estimation::endcap_symbol(i / 2, 0, i) };
-
-    //     key_ordering += key;
-
-    //     gtsam::Values values;
-    //     gtsam::GaussianFactorGraph linearFactorGraph;
-
-    //     values.insert(key, _endcaps[i]);
-    //     // linearFactorGraph.push_back(prior);
-    //     const gtsam::PriorFactor<Eigen::Vector3d> init_prior(key, _endcaps[i], z0_noise);
-    //     linearFactorGraph.push_back(init_prior.linearize(values));
-    //     const gtsam::GaussianConditional::shared_ptr marginal{
-    //       linearFactorGraph.marginalMultifrontalBayesNet(key_ordering)->front()
-    //     };
-    //     const gtsam::VectorValues result{ marginal->solve(gtsam::VectorValues()) };
-
-    //     _endcap_priors[i] = boost::make_shared<gtsam::JacobianFactor>(
-    //         marginal->keys().front(), marginal->getA(marginal->begin()),
-    //         marginal->getb() - marginal->getA(marginal->begin()) * result[key], marginal->get_model());
-    //   }
 
     // publish_estimation();
     if (all_poses_received)
@@ -979,7 +944,7 @@ struct traj_estimation_t
   {
     if (_node_status->status() == interface::NodeStatus::PREPARING)
     {
-      init_endcaps();
+      // init_endcaps();
       // publish_estimation();
     }
     else if (_node_status->status() == interface::NodeStatus::RUNNING)
@@ -987,24 +952,11 @@ struct traj_estimation_t
       // publish_estimation();
       if (_endcaps_q.size() > 0)
       {
-        // DEBUG_PRINT
-        // time_meas("proc", false);
         process_endcaps(_endcaps_q.front());
-        // time_meas("proc", true);
 
         _endcaps_q.pop_front();
         publish_estimation();
       }
-
-      // run_fg();
-      // if (visualize)
-      // {
-      // for (int i = 0; i < 6; ++i)
-      // {
-      //   if (_valid_estimate[i])
-      //     point_to_marker(_last_estimate[i], colors[i / 2], estimation_pub[i]);
-      // }
-      // }
     }
   }
 

@@ -1,0 +1,14 @@
+filters:
+  black:  
+    low: [0,0,0]         # HSV
+    high: [179,255,41]   # HSV
+  red:
+    low: [121, 103, 68]    # HSV
+    high: [156, 255, 255]  # HSV
+  green:
+    low: [23, 130, 72]     # HSV
+    high: [64, 255, 255]    # HSV
+  blue:
+    low: [4, 139, 54]     # HSV
+    high: [23, 255, 255]  # HSV
+

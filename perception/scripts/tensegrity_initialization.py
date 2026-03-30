@@ -13,10 +13,10 @@ import json
 
 class TensegrityInitializer(object):
     def __init__(self):
-        self.type = rospy.get_param("~type", "")
+        # self.type = rospy.get_param("~type", "")
 
-        if self.type == "file":
-            filename = rospy.get_param("~filename", "")
+        # if self.type == "file":
+        #     filename = rospy.get_param("~filename", "")
 
         # self.topic_name = rospy.get_param("~topic_name", "")
         # self.format = rospy.get_param("~format", "")

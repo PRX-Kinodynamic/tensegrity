@@ -1,5 +1,13 @@
 <launch>
-    <node pkg="perception" type="camera_publisher" name="camera_publisher" output="screen">
-    <rosparam command="load" file="$(find perception)/config/logitech_brio.yaml" />
+    <node pkg="perception" type="realsense_publisher.py" name="realsense_publisher" output="screen">
+        <param name="camera_frame" value="real_sense" />
+        <param name="camera_namespace" value="/camera/" />
+        <param name="camera_name_topic" value="/camera/info" />
+    </node>
+
+    <node pkg="interface" type="tf_from_yaml.py" name="tf_from_yaml" output="screen">
+        <param name="pose" type="yaml" value="[ 0.997,  0.005, -0.075,  1.501,  0.0, -0.997, -0.072,  0.585,-0.075,  0.072, -0.995,  2.38 ]" />
+        <param name="child_frame" value="real_sense" />
+        <param name="parent_frame" value="world" />
     </node>
 </launch>

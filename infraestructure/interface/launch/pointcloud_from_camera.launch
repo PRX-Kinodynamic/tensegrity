@@ -14,16 +14,17 @@
         <arg name="filename" default="$(arg output_dir)/$(arg filename_prefix)_gt_poses.txt"/>
         <arg name="autostart" default="$(arg autostart)"/>
     </include> -->
+    <rosparam command="load" ns="/camera/color" file="$(find perception)/config/color_filters.yaml" />
 
 	<node pkg="perception" type="pointcloud_from_imgs" name="pointcloud_from_imgs" required="true" output="screen">
         <param name="node_id" value="/nodes/pointcloud"/>
-        <param name="filters_namespace" value="/camera/filters/"/>
-        <param name="image_topic" value="/images/rgb"/>
-        <param name="depth_topic" value="/images/depth"/>
+        <param name="filters_namespace" value="/camera/color/filters/"/>
+        <param name="image_topic" value="/camera/rgb"/>
+        <param name="depth_topic" value="/camera/depth"/>
         <param name="depth_scale" value="1000"/>
         <param name="camera_frame" value="real_sense"/>
         <param name="world_frame" value="world"/>
-        <param name="camera_info_topic" value="/real_sense/info"/>
+        <param name="camera_info_topic" value="/camera/info"/>
         <param name="visualize" value="true"/>
         <param name="tensegrity_pose_topic" value="/tensegrity/pose/current"/>
         <param name="points_valid_rate" value="$(arg points_valid_rate)"/>
@@ -88,7 +89,7 @@
         />
   </node> -->
 
-    <node if="$(arg autostart)" pkg="interface" type="status_wait_and_run.py" name="status_wait_and_run" output="screen">
+<!--     <node if="$(arg autostart)" pkg="interface" type="status_wait_and_run.py" name="status_wait_and_run" output="screen">
         <param name="nodes_to_wait" type="yaml" 
             value="[
                 /nodes/EndcapsMsgToFile/status/current
@@ -106,15 +107,15 @@
                 /nodes/pointcloud/status/change
               ]"
             />
-  </node>
+  </node> -->
 
-  <node if="$(arg autostart)" pkg="interface" type="status_finish_and_exit.py" name="status_finish_and_exit" output="screen"  required="true">
+ <!--  <node if="$(arg autostart)" pkg="interface" type="status_finish_and_exit.py" name="status_finish_and_exit" output="screen"  required="true">
         <param name="nodes_to_wait_finish" type="yaml" 
             value="[
                 /nodes/playback/status/current
               ]"
             />
-  </node>
+  </node> -->
 
 
 </launch>

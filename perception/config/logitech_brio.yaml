@@ -1,0 +1,21 @@
+size: [1280,720]
+focal_length: [909.6708984375, 908.9639282226562]
+optical_center: [647.3477172851562, 352.689208984375]
+camera_extrinsics: [ 0.997,  0.005, -0.075,  1.501,  0.0, -0.997, -0.072,  0.585,-0.075,  0.072, -0.995,  2.38 ]
+
+camera_name: "real_sense"
+# distortion: []
+filters:
+  black:  
+    low: [0,0,0]         # HSV
+    high: [180,255,60]   # HSV
+  red:
+    low: [160,153,57]    # HSV
+    high: [179,255,150]  # HSV
+  green:
+    low: [70,100,30]     # HSV
+    high: [95,255,95]    # HSV
+  blue:
+    low: [94,62,45]     # HSV
+    high: [151,255,255]  # HSV
+

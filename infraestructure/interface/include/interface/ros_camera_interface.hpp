@@ -38,7 +38,6 @@ class ros_camera_interface_t
 public:
   ros_camera_interface_t(ros::NodeHandle& nh) : _tf_listener(_tf_buffer)
   {
-    DEBUG_PRINT
     std::string camera_info_topic;
     std::string& camera_frame{ _camera_frame };
     std::string& world_frame{ _world_frame };
@@ -48,7 +47,6 @@ public:
     PARAM_SETUP(nh, camera_info_topic);
 
     _camera_info_subscriber = nh.subscribe(camera_info_topic, 1, &This::camera_info_callback, this);
-    DEBUG_PRINT
     DEBUG_VARS(camera_info_topic);
   }
 

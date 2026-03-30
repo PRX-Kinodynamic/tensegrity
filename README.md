@@ -24,6 +24,10 @@ export Torch_DIR=$(pwd)/libtorch # <-- Add it to bashrc!
 
 ```
 
+Other dependencies:
+* pyrealsense2 - For using a realsense camera for RGB-D observations
+	* Need to install using pip (NOT using conda -- python makes no sense) 
+
 
 ## Compile
 Clone this repository inside src:
@@ -60,3 +64,16 @@ roscore
 rosrun perception image_publisher.py
 roslaunch interface camera_info_publisher.launch camera_info_file:=/common/home/pm708/Desktop/catkin_edgar/src/tensegrity/estimation/config/camera_info.yaml
 ```
+
+## Launch Files
+
+* Publish realsense RGB-D images and camera info in ros topics
+	* roslaunch perception camera_publisher.launch
+* Manual calibration of color masks:
+	* roslaunch perception tensegrity_endcap_v2.launch
+	* rqt # plugins -> Configuration -> DynamicReconfigure . Configure each mask Low - High 
+* Run pointcloud clustering
+	* roslaunch interface pointcloud_from_camera.launch
+		* Assumes correct color filters are in file: perception/config/color_filters.yaml
+* Run the state estimation of Tensegrity
+	* roslaunch interface tensegrity_state_estimation.launch

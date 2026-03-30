@@ -1,0 +1,58 @@
+<launch>
+
+    <arg name="output_dir" default="$(env TENSEGRITY_ROS)/data/test/"/>
+    <arg name="filename_prefix" default="test"/>
+    <arg name="visualize" default="true"/>
+    <arg name="collect_all_videos" default="false"/>
+    <arg name="collect_overlay_video" default="false"/>
+  
+    <arg name="use_cable_sensors" default="true"/>
+    <arg name="publish_npy_poses" default="false"/>
+    <arg name="autostart" default="false"/>
+    <arg name="points_valid_rate" default="0.9"/>
+    <arg name="black_points_valid_rate" default="0.05"/>
+    <arg name="publish_mocaps" default="true"/>
+    <arg name="initial_poses_params" value="[/initial/bar/0,/initial/bar/1,/initial/bar/2]"/>
+    <arg name="initial_endcaps_params" value="[/initial/endcaps/0,/initial/endcaps/1,/initial/endcaps/2,/initial/endcaps/3,/initial/endcaps/4,/initial/endcaps/5]"/>
+
+
+    <node pkg="estimation" type="fg_state_estimation" name="fg_state_estimation" required="true" output="screen">
+        <param name="node_id" value="/nodes/state_estimation"/>
+        <param name="visualize" value="true"/>
+        <param name="tensegrity_endcaps_topic" value="/tensegrity/endcaps"/>
+        <param name="frequency" value="30"/>
+        <param name="window_dt" value="0.1"/>
+        <param name="window_size" value="10"/>
+        <param name="tensegrity_pose_topic" value="/tensegrity/pose/current"/>
+        <!-- <param name="initial_poses_params" type="yaml" value="$(arg initial_poses_params)"/> -->
+        <!-- <param name="initial_endcaps_params" type="yaml" value="$(arg initial_endcaps_params)"/> -->
+        <param name="cable_map_filename" value="$(find interface)/config/cable_map.txt"/>
+        <param name="sensors_topicname" value="/control_msg"/>
+        <param name="cable_unit_conversion" value="0.001"/>
+        <param name="queue_size" value="10"/>
+        <param name="poses_filename" value="/tmp/poses.txt"/>
+        <param name="estimated_endcaps_topic" value="/tensegrity/endcaps/estimated"/>
+    </node> 
+
+
+
+
+
+
+
+
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="traj_fg_viz_nodelet"  args="manager" output="screen"/>
+    
+    <node if="$(arg visualize)" pkg="nodelet" type="nodelet" name="color_filter" 
+        args="load perception/ColorFilter traj_fg_viz_nodelet" output="screen">
+        <param name="subscriber_topic" value="/rgb_images"/>
+        <param name="publisher_topic" value="/rgb_images/filter"/>
+        <param name="encoding" value="bgr8"/>
+        <param name="filters_namespace" value="/camera/filters/"/>
+        <param name="node_id" value="/node/color_filter"/>
+        <param name="publish_rgb" value="true"/>
+    </node> 
+
+ 
+
+</launch>

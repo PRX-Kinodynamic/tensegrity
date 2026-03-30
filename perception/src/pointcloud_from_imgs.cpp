@@ -246,7 +246,8 @@ struct pointcloud_from_imgs_t
     _node_status->status(interface::NodeStatus::FINISH);
   }
 
-  void read_color_filter(const std::string filters_namespace, const std::string color,  cv::Scalar& cv_low,  cv::Scalar& cv_high)
+  void read_color_filter(const std::string filters_namespace, const std::string color, cv::Scalar& cv_low,
+                         cv::Scalar& cv_high)
   {
     ros::NodeHandle nh_param(filters_namespace + "/" + color);
     std::vector<int> low, high;
@@ -254,6 +255,9 @@ struct pointcloud_from_imgs_t
     PARAM_SETUP(nh_param, high)
     cv_low = cv::Scalar(low[0], low[1], low[2]);
     cv_high = cv::Scalar(high[0], high[1], high[2]);
+
+    DEBUG_VARS(color, low)
+    DEBUG_VARS(color, high)
   }
 
   pointcloud_from_imgs_t(ros::NodeHandle& nh)
@@ -299,10 +303,10 @@ struct pointcloud_from_imgs_t
     double frequency{ 30 };
     std::string filters_namespace;
     PARAM_SETUP(nh, filters_namespace);
-    read_color_filter(filters_namespace, "black",  low_black,  high_black);
-    read_color_filter(filters_namespace, "red",  low_red,  high_red);
-    read_color_filter(filters_namespace, "green",  low_green,  high_green);
-    read_color_filter(filters_namespace, "blue",  low_blue,  high_blue);
+    read_color_filter(filters_namespace, "black", low_black, high_black);
+    read_color_filter(filters_namespace, "red", low_red, high_red);
+    read_color_filter(filters_namespace, "green", low_green, high_green);
+    read_color_filter(filters_namespace, "blue", low_blue, high_blue);
 
     PARAM_SETUP(nh, points_valid_rate);
     PARAM_SETUP(nh, black_points_valid_rate);
@@ -382,20 +386,8 @@ struct pointcloud_from_imgs_t
     // if (initialized)
     // {
     _node_status->status(interface::NodeStatus::READY);
-    // }
-    // else
-    // {
-    //   PRINT_MSG("Running Manual initialization");
-    //   for (int i = 0; i < 6; ++i)
-    //   {
-    //     ros::NodeHandle nh_i("/endcaps/init/" + std::to_string(i));
 
-    //     _save_inits[i] = false;
-    //     _servers[i] = std::make_shared<DynReconfServer>(nh_i);
-    //     // f = boost::bind(&Derived::cfg_callback, this, _1, _2);
-    //     _servers[i]->setCallback(boost::bind(&This::cfg_callback, this, _1, _2, i));
-    //   }
-    // }
+    PRINT_MSG("Initialized")
   }
 
   void cfg_callback(perception::TensegrityInitializationConfig& config, uint32_t level, int endcap)
@@ -423,6 +415,12 @@ struct pointcloud_from_imgs_t
     // else if (_node_status->status() == interface::NodeStatus::RUNNING and rgb_received and depth_received)
     else if (_node_status->status() == interface::NodeStatus::RUNNING and _queue_rgb.size() > 0)
     {
+      if (not _camera_interface->valid())
+      {
+        PRINT_MSG("Camera interface not properly set. Changing status to PREPARING");
+        _node_status->status(interface::NodeStatus::PREPARING);
+        return;
+      }
       // PRINT_MSG("Running icp");
       const auto start{ std::chrono::steady_clock::now() };
       run_icp();
@@ -818,12 +816,7 @@ struct pointcloud_from_imgs_t
       // const auto start{ std::chrono::steady_clock::now() };
       // time_meas("cluster_fast " + std::to_string(max_steps), false);
       cluster_fast(v_out, c_out, clust_out, v_in, c_in, clust_in);
-      // DEBUG_VARS(clust_out);
-      // time_meas("cluster_fast " + std::to_string(max_steps), true);
-      // DEBUG_VARS(v_out.size(), v_in.size());
-      // const auto finish{ std::chrono::steady_clock::now() };
-      // const std::chrono::duration<double> elapsed_seconds{ finish - start };
-      // DEBUG_VARS(elapsed_seconds.count());
+
       max_steps--;
     }
 
@@ -841,10 +834,6 @@ struct pointcloud_from_imgs_t
     vals_out.swap(v_out);
     covs_out.swap(c_out);
     clust_out.swap(tot_clustered);
-    // clust_out.swap(clust_in);
-    // LOG_VARS(max_steps, vals_out.size());
-    // time_meas(time_str, true);
-    //
   }
 
   void get_subimage(CvMatPtr& all_masks)
@@ -864,8 +853,6 @@ struct pointcloud_from_imgs_t
     const double yc{ mc.m01 / mc.m00 };
     const Pixel centroid{ xc, yc };
 
-    // DEBUG_VARS(xc, yc)
-
     const double area{ cv::contourArea(all_contours[0]) };
     const double diameter{ std::sqrt(4.0 * area / tensegrity::constants::pi) * 6 };
 
@@ -882,16 +869,7 @@ struct pointcloud_from_imgs_t
     const cv::Rect rec(px_cp[0], px_cp[1], recp_width, recp_height);
     // const cv::Rect rec_m(px_cm[0], px_cm[1], recm_width, recm_height);
 
-    // cv::Mat mred{ _frame_colors[red_idx](rec) };
-    // cv::Mat mgreen{ _frame_colors[green_idx](rec) };
-    // cv::Mat mblue{ _frame_colors[blue_idx](rec) };
-    // cv::Mat mblack{ _frame_black(rec) };
-    // cv::Mat mdepth{ img_depth(rec) };
-
     const int total_pts{ static_cast<int>(recp_width * recp_height) };
-
-    // points = Eigen::Matrix<double, 3, -1>::Zero(3, total_pts);
-    // point_colors = Eigen::Matrix<double, 3, -1>::Zero(3, total_pts);
 
     Eigen::Vector2d pt;
     int idx{ 0 };
@@ -920,6 +898,7 @@ struct pointcloud_from_imgs_t
           pt_color += colors[blue_idx];
         }
         // black_points_valid_rate
+
         const double rand_sample{ factor_graphs::random_uniform() };
         if ((is_color and rand_sample > points_valid_rate) or
             ((not is_color) and rand_sample > black_points_valid_rate))
@@ -940,8 +919,6 @@ struct pointcloud_from_imgs_t
         }
       }
     }
-
-    // total_points = idx;
   }
 
   void process_colors()
@@ -1326,18 +1303,6 @@ struct pointcloud_from_imgs_t
     }
     points.clear();
     point_colors.clear();
-    // cv::Mat grad_masks;
-    // cv::Sobel(*all_masks, grad_masks, CV_16S, 1, 0);
-    // cv::Mat abs_grad;
-    // cv::convertScaleAbs(grad_masks, abs_grad);
-    // cv::Mat diff = abs_grad - abs_grad_x;
-    // publish_img(diff, pub_lines, "mono8");
-    // publish_img(abs_grad, pub_sobel_all, "mono8");
-
-    // pub_lines
-    // publish_img(_frame_colors[red_idx], pub_red_masks, "mono8");
-    // publish_img(_frame_colors[green_idx], pub_green_masks, "mono8");
-    // publish_img(_frame_colors[blue_idx], pub_blue_masks, "mono8");
   }
 };
 
