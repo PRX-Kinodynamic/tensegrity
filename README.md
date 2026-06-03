@@ -63,7 +63,7 @@ In separate tabs:
 ```
 roscore
 rosrun perception image_publisher.py
-roslaunch interface camera_info_publisher.launch camera_info_file:=/common/home/pm708/Desktop/catkin_edgar/src/tensegrity/estimation/config/camera_info.yaml
+roslaunch interface camera_info_publisher.launch camera_info_file:=${TENSEGRITY_ROS}/src/tensegrity/estimation/config/camera_info.yaml
 ```
 
 ## Launch Files
